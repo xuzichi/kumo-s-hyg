@@ -50,6 +50,8 @@ class Main:
                     break
             except CancelledError:
                 continue
+            except KeyboardInterrupt:
+                continue
             except Exception as e:
                 logger.error(f'发生错误: \n{traceback.format_exc()}')             
 
@@ -113,6 +115,15 @@ class Main:
         # 开始输出 yml 
         config_str = f'''  project_id: {project_id} # {project_json['data']['name']} {project_json['data']['sale_flag']}'''.strip()
         config_str += f'\n'
+        if project_json['data']['sales_dates'] != []:
+            config_str += f'\nsales_date: # 选择演出日期(单选):'
+            for i in project_json['data']['sales_dates']:
+                if i['date'] == project_json['data']['sales_dates'][0]['date']:
+                    config_str += f'''\n  - {i['date']} # {i['date']}'''
+                else:
+                    config_str += f'''\n  # - {i['date']} # {i['date']}'''
+            config_str += f'\n'
+
         config_str += f'\nscreen_ticket: # 选择票种信息(单选):'
         for screen_idx, screen in enumerate(project_json['data']['screen_list']):
             for ticket_idx, ticket in enumerate(screen['ticket_list']):
@@ -258,9 +269,13 @@ cookie: {self.cookie}
                             ),
                         config_name=config_name,
                         ).run()
+            except CancelledError:
+                return
+            except KeyboardInterrupt:
+                return
             except Exception as e:
                 import traceback
-                print(traceback.format_exc())  # This will print the full traceback
+                print(traceback.format_exc())
                 raise e
             
             

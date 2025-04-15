@@ -45,102 +45,15 @@ ERRNO_DICT = {
 }
 
 
-class Logic:
+
+class LogicUtils:
     def __init__(self, order: Order, config_name: str) -> None:
         self.order = order        
         self.config_name = config_name
         self.config = None
         self.config_hash = None
         self._monitoring = False
-    
-    def run(self):
-        try:
-            logger.opt(colors=True).info(f"配置文件 {self.config_name} 开始运行.")
-            
-            self.config_hash = self.compute_config_hash(self.config_name)
-            self.config = self.read_config(self.config_name)
-            
-            self.wait_invoice = self.config["setting"]["wait_invoice"]
-            self.interval = self.config["setting"]["interval"]
-            self.in_stock = self.config["setting"]["in_stock"]
-            self.in_stock_interval = self.config["setting"]["in_stock_interval"]
-            
-            self.order.build_by_config(config=self.config)
-                    
-            config_monitor_thread = threading.Thread(target=self.config_monitor, daemon=True)
-            config_monitor_thread.start()
-            
-            if self.wait_invoice: # 等待开票
-                self.wait_for_invoice()
-            
-            self.order.prepare()
-            self.order.confirm()
-
-            while True:
-                time.sleep(self.interval) 
-                try:    
-                    res = self.order.create() # 下单        
-                    if res["errno"] == 0:
-                        logger.warning(f"下单成功, 正在判断是否为假票...")
-                        pay_token = res["data"]["token"]
-                        order_id = res["data"]["orderId"] if "orderId" in res["data"] else None
-                        create_status = self.order.api.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
-                        if create_status["errno"] == 0:
-                            logger.success('购票成功! 请尽快打开订单界面支付')
-                            break
-                        else:
-                            logger.error(f"假票, 请重新下单.")
-                            continue
-                    elif res["errno"] == 3:
-                        logger.info(f"请慢一点...")
-                        time.sleep(4.96)
-                        continue
-                    elif res["errno"] == 100001:
-                        logger.info(f"暂未放票或已售罄")
-                        continue
-                    elif res["errno"] == 100051:
-                        logger.warning(f"订单准备过期, 请重新验证")
-                        self.order.prepare()
-                        self.order.confirm()
-                        continue
-                    elif res["errno"] == 100009:
-                        logger.info(f"库存不足, 暂无余票")
-                        if self.in_stock:
-                            logger.info(f"监控库存中, 等待 {self.in_stock_interval} 秒")
-                            time.sleep(self.in_stock_interval)
-                            continue
-                    elif res["errno"] == 100003:
-                        logger.warning(f"该项目每人限购1张, 购票人已存在订单.")
-                        break
-                    elif res["errno"] == 100079:
-                        logger.warning(f"本项目已经下单, 有尚未完成订单, 请完成订单后再试")
-                        break
-                    elif res["errno"] in ERRNO_DICT:
-                        logger.info(f"{ERRNO_DICT[res['errno']]}")
-                    else:
-                        logger.info(f"发生错误: {res}")
-                        
-                except KeyboardInterrupt:
-                    break
-                except Exception as e:
-                    print(e)
-                    logger.error(f"发生错误: {e}")
-                    print(traceback.format_exc())
-                    time.sleep(1)
-                    
-        except CancelledError:
-            logger.error(f"已取消")
-        except Exception as e:
-            logger.error(f"发生错误: {e}")
-            print(traceback.format_exc())
-        finally:
-            try:
-                self._monitoring = False # 停止监控
-                config_monitor_thread.join()
-                logger.opt(colors=True).info(f"<blue>[WatchCat]</blue> 文件 {self.config_name} 监控结束")
-            except Exception as e:
-                print(traceback.format_exc())
-                   
+          
     def compute_config_hash(self, config_name: str) -> str:
         with open(config_name, "r") as f:
             import hashlib
@@ -240,5 +153,107 @@ class Logic:
             pass
 
             
+            
+
+class Logic():
+    def __init__(self, order: Order, config_name: str) -> None:
+        self.order = order 
+        self.utils = LogicUtils(order=order, config_name=config_name)
+        self.config_name = config_name
+        self.config_monitor_thread = None
+
+    
+    def run(self):
+        try:
+            logger.opt(colors=True).info(f"配置文件 {self.config_name} 开始运行.")
+            
+            self.config_hash = self.utils.compute_config_hash(self.config_name)
+            self.config = self.utils.read_config(self.config_name)
+            
+            self.wait_invoice = self.config["setting"]["wait_invoice"]
+            self.interval = self.config["setting"]["interval"]
+            self.in_stock = self.config["setting"]["in_stock"]
+            self.in_stock_interval = self.config["setting"]["in_stock_interval"]
+            
+            # build 参数
+            self.order.build(config=self.config)
+                    
+            self.config_monitor_thread = threading.Thread(target=self.utils.config_monitor, daemon=True)
+            self.config_monitor_thread.start()
+            
+            if self.wait_invoice: # 等待开票
+                self.utils.wait_for_invoice()
+            
+            self.order.prepare()
+            self.order.confirm()
+
+            while True:
+                time.sleep(self.interval) 
+                try:    
+                    res = self.order.create() # 下单        
+                    if res["errno"] == 0:
+                        logger.warning(f"下单成功, 正在判断是否为假票...")
+                        pay_token = res["data"]["token"]
+                        order_id = res["data"]["orderId"] if "orderId" in res["data"] else None
+                        create_status = self.order.api.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
+                        if create_status["errno"] == 0:
+                            logger.success('购票成功! 请尽快打开订单界面支付')
+                            break
+                        else:
+                            logger.error(f"假票, 请重新下单.")
+                            continue
+                    elif res["errno"] == 3:
+                        logger.info(f"请慢一点...")
+                        time.sleep(4.96)
+                        continue
+                    elif res["errno"] == 100001:
+                        logger.info(f"暂未放票或已售罄")
+                        continue
+                    elif res["errno"] == 100051:
+                        logger.warning(f"订单准备过期, 请重新验证")
+                        self.order.prepare()
+                        self.order.confirm()
+                        continue
+                    elif res["errno"] == 100009:
+                        logger.info(f"库存不足, 暂无余票")
+                        if self.in_stock:
+                            logger.info(f"监控库存中, 等待 {self.in_stock_interval} 秒")
+                            time.sleep(self.in_stock_interval)
+                            continue
+                    elif res["errno"] == 100003:
+                        logger.warning(f"该项目每人限购1张, 购票人已存在订单.")
+                        break
+                    elif res["errno"] == 100079:
+                        logger.warning(f"本项目已经下单, 有尚未完成订单, 请完成订单后再试")
+                        break
+                    elif res["errno"] in ERRNO_DICT:
+                        logger.info(f"{ERRNO_DICT[res['errno']]}")
+                    else:
+                        logger.info(f"发生错误: {res}")
+                        
+                except KeyboardInterrupt:
+                    break
+                except Exception as e:
+                    print(e)
+                    logger.error(f"发生错误: {e}")
+                    print(traceback.format_exc())
+                    time.sleep(1)
+                    
+        except CancelledError:
+            return
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            logger.error(f"发生错误: {e}")
+            print(traceback.format_exc())
+        finally:
+            try:
+                self._monitoring = False # 停止监控
+                self.config_monitor_thread.join()
+                logger.opt(colors=True).info(f"<blue>[WatchCat]</blue> 文件 {self.config_name} 监控结束")
+            except Exception as e:
+                print(traceback.format_exc())
+                   
+
             
             

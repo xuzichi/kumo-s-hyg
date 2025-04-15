@@ -53,6 +53,11 @@ class myInfoJson:
 class createStatusJson:
     pass
 
+@dataclass
+class ProjectInfoByDateJson:
+    pass
+
+
 
 class Api:
     def __init__(self, cookie: Optional[str] = None) -> None:
@@ -173,6 +178,10 @@ class Api:
         _headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"
         return Api._make_api_call('GET', url, _headers)
     
+    def project_info_by_date(self, project_id: str, date: str) -> "ProjectInfoByDateJson":
+        url = f'https://show.bilibili.com/api/ticket/project/infoByDate?id={project_id}&date={date}'
+        return Api._make_api_call('GET', url, self.headers)
+
     @staticmethod
     def qr_login() -> str:
         

@@ -12,6 +12,7 @@ pip install PyYAML
 pip install requests
 pip install qrcode
 pip install loguru
+pip install pillow
 ```
 
 ## 运行
@@ -56,6 +57,7 @@ yml文件是一种配置文件格式, 使用 # 进行注释,被注释的行将�
     - [x] 实名制票
     - [x] 记名票
     - [x] 邮寄
+    - [x] 选日期票
     - [ ] 选座票
 
 - 运行
