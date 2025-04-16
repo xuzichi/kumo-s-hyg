@@ -1,0 +1,60 @@
+name: Build and Release Python
+
+on:
+  push:
+    branches:
+      - main  # 或你项目的默认分支
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    # runs-on: [self-hosted, linux]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'  # 选择你的Python版本
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Extract version from __init__.py
+      id: get_version
+      run: |
+        python setup.py sdist bdist_wheel
+        echo "VERSION=$(python app/__init__.py  -v)" >> $GITHUB_ENV
+
+    - name: Build exe with PyInstaller
+      run: |
+        pyinstaller --onefile --name your_app_name --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
+      # 这里替换为你的入口脚本路径
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ env.VERSION }}
+        name: Release v${{ env.VERSION }}
+        body: "Automated release for version ${{ env.VERSION }}"
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload executable to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/myapp*  # this will catch both Linux and Windows binaries
+
+
+
+
+
+
