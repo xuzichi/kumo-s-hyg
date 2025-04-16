@@ -44,6 +44,10 @@ jobs:
 
     - name: Create Git Tag
       run: |
+        # 删除旧 Tag（如果存在）
+        git tag -d "v${{ env.VERSION }}" || true
+        git push origin --delete "v${{ env.VERSION }}" || true
+        # 创建新 Tag
         git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
         git push origin "v${{ env.VERSION }}"
       env:
@@ -63,5 +67,5 @@ jobs:
     - name: Upload executable to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v${{ env.VERSION }}  # 确保指定 Tag
+        tag_name: v${{ env.VERSION }}
         files: dist/your_app_name*
