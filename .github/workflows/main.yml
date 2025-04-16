@@ -17,13 +17,13 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         fetch-tags: true
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -36,7 +36,7 @@ jobs:
       id: get_version
       run: |
         echo "VERSION=$(python app/__init__.py -v)" >> $GITHUB_ENV
-        echo "OUTPUT_NAME=${APP_NAME}-windows-v$(python app/__init__.py -v)" >> $GITHUB_ENV
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$(python app/__init__.py -v)" >> $GITHUB_ENV
 
     - name: Build Windows EXE
       run: |
@@ -45,7 +45,7 @@ jobs:
         mv dist/${{ env.OUTPUT_NAME }}.exe dist/${{ env.OUTPUT_NAME }}.exe
 
     - name: Upload Windows Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: windows-executable
         path: dist/${{ env.OUTPUT_NAME }}.exe
@@ -57,13 +57,13 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         fetch-tags: true
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -76,7 +76,7 @@ jobs:
       id: get_version
       run: |
         echo "VERSION=$(python app/__init__.py -v)" >> $GITHUB_ENV
-        echo "OUTPUT_NAME=${APP_NAME}-macos-v$(python app/__init__.py -v)" >> $GITHUB_ENV
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$(python app/__init__.py -v)" >> $GITHUB_ENV
 
     - name: Build macOS App
       run: |
@@ -85,7 +85,7 @@ jobs:
         chmod +x dist/${{ env.OUTPUT_NAME }}
 
     - name: Upload macOS Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: macos-executable
         path: dist/${{ env.OUTPUT_NAME }}
@@ -97,44 +97,67 @@ jobs:
       contents: write
 
     steps:
-    - name: Download Windows Artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: windows-executable
-        path: windows-build
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-executable
+          path: windows-build
 
-    - name: Download macOS Artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: macos-executable
-        path: macos-build
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-executable
+          path: macos-build
 
-    - name: Set Git User
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+      - name: Set Git User
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-    - name: Create Git Tag
-      run: |
-        git tag -d "v${{ env.VERSION }}" || true
-        git push origin --delete "v${{ env.VERSION }}" || true
-        git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
-        git push origin "v${{ env.VERSION }}"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check if Release Exists
+        id: check_release
+        uses: octokit/rest.js-action@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          method: GET
+          url: /repos/${{ github.repository }}/releases
+        env:
+          VERSION: ${{ env.VERSION }}
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: v${{ env.VERSION }}
-        name: Release v${{ env.VERSION }}
-        body: |
-          Windows: ${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
-          macOS: ${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
-        draft: false
-        prerelease: false
-        files: |
-          windows-build/${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
-          macos-build/${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Filter Existing Releases
+        id: filter_releases
+        run: |
+          EXISTING_RELEASE=$(echo '${{ steps.check_release.outputs.result }}' | jq -r '.[] | select(.tag_name == "v${{ env.VERSION }}") | .tag_name')
+          if [ -n "$EXISTING_RELEASE" ]; then
+            echo "::set-output name=release_exists::true"
+            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
+          else
+            echo "::set-output name=release_exists::false"
+          fi
+
+      - name: Create Git Tag
+        if: steps.filter_releases.outputs.release_exists == 'false'
+        run: |
+          git tag -d "v${{ env.VERSION }}" || true
+          git push origin --delete "v${{ env.VERSION }}" || true
+          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
+          git push origin "v${{ env.VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        if: steps.filter_releases.outputs.release_exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          body: |
+            Windows: ${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
+            macOS: ${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            windows-build/${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
+            macos-build/${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
