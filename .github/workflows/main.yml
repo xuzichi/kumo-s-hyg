@@ -27,7 +27,6 @@ jobs:
     - name: Extract version from __init__.py
       id: get_version
       run: |
-        python setup.py sdist bdist_wheel
         echo "VERSION=$(python app/__init__.py  -v)" >> $GITHUB_ENV
 
     - name: Build exe with PyInstaller
