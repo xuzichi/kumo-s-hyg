@@ -3,12 +3,13 @@ name: Build and Release Python
 on:
   push:
     branches:
-      - main  # 或你项目的默认分支
+      - main
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    # runs-on: [self-hosted, linux]
+    permissions:
+      contents: write  # 关键修复：添加权限
 
     steps:
     - name: Checkout repository
@@ -17,7 +18,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'  # 选择你的Python版本
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
@@ -27,16 +28,21 @@ jobs:
     - name: Extract version from __init__.py
       id: get_version
       run: |
-        echo "VERSION=$(python app/__init__.py  -v)" >> $GITHUB_ENV
+        echo "VERSION=$(python app/__init__.py -v)" >> $GITHUB_ENV
 
     - name: Build exe with PyInstaller
       run: |
         pyinstaller --onefile --name your_app_name --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
-      # 这里替换为你的入口脚本路径
+
+    - name: Create Git Tag (可选，确保标签存在)
+      run: |
+        git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
+        git push origin "v${{ env.VERSION }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2  # 改用 v2
       with:
         tag_name: v${{ env.VERSION }}
         name: Release v${{ env.VERSION }}
@@ -47,13 +53,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload executable to Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2  # 改用 v2
       with:
-        files: |
-          dist/myapp*  # this will catch both Linux and Windows binaries
-
-
-
-
-
-
+        files: dist/your_app_name*  # 确保路径匹配
