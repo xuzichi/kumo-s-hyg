@@ -7,19 +7,19 @@ on:
 
 env:
   APP_NAME: khyg
-  # 版本号会在 Extract version 步骤中动态设置
+  # Version number will be dynamically set in the Extract version step
 
 jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: write # Needed to upload artifacts
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 0 # Fetch all history for version extraction/tagging
         fetch-tags: true
 
     - name: Set up Python
@@ -31,29 +31,49 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
+      shell: pwsh # Use PowerShell
 
     - name: Extract version from __init__.py
       id: get_version
       run: |
-        echo "VERSION=$(python app/__init__.py -v)" >> $GITHUB_ENV
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$(python app/__init__.py -v)" >> $GITHUB_ENV
+        $VERSION_STR = python app/__init__.py -v
+        if (-not $VERSION_STR) {
+          Write-Error "Failed to extract version from app/__init__.py -v"
+          exit 1
+        }
+        # Set environment variables for subsequent steps in this job and for create-release job needs
+        echo "VERSION=$VERSION_STR" >> $env:GITHUB_ENV # Use PowerShell syntax for Windows runner
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$VERSION_STR" >> $env:GITHUB_ENV # Use PowerShell syntax
+        Write-Host "Extracted Version: $VERSION_STR"
+        Write-Host "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-windows-v$VERSION_STR"
+      shell: pwsh # Use PowerShell
+
+    - name: Verify Environment Variables # Added verification step
+      run: |
+        Write-Host "VERSION is: ${{ env.VERSION }}"
+        Write-Host "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
+        if (-not $env:OUTPUT_NAME) {
+          Write-Error "OUTPUT_NAME environment variable is not set or is empty after extraction!"
+          exit 1
+        }
+      shell: pwsh
 
     - name: Build Windows EXE
       run: |
-        pyinstaller --onefile --name ${{ env.OUTPUT_NAME }} --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
-        # 重命名输出文件以去除多余的扩展名
-        mv dist/${{ env.OUTPUT_NAME }}.exe dist/${{ env.OUTPUT_NAME }}.exe
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
+        # Redundant mv command removed
+      shell: pwsh # Use PowerShell
 
     - name: Upload Windows Artifact
       uses: actions/upload-artifact@v4
       with:
         name: windows-executable
-        path: dist/${{ env.OUTPUT_NAME }}.exe
+        path: dist/${{ env.OUTPUT_NAME }}.exe # Path to the executable created by PyInstaller
 
   build-macos:
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: write # Needed to upload artifacts
 
     steps:
     - name: Checkout repository
@@ -75,89 +95,141 @@ jobs:
     - name: Extract version from __init__.py
       id: get_version
       run: |
-        echo "VERSION=$(python app/__init__.py -v)" >> $GITHUB_ENV
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$(python app/__init__.py -v)" >> $GITHUB_ENV
+        VERSION_STR=$(python app/__init__.py -v)
+        if [ -z "$VERSION_STR" ]; then
+          echo "::error::Failed to extract version from app/__init__.py -v"
+          exit 1
+        fi
+        # Set environment variables for subsequent steps in this job and for create-release job needs
+        echo "VERSION=$VERSION_STR" >> $GITHUB_ENV # Use Bash syntax for macOS runner
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV # Use Bash syntax
+        echo "Extracted Version: $VERSION_STR"
+        echo "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-macos-v$VERSION_STR"
+
+    # Optional: Add a step to verify the env var was set
+    - name: Verify Environment Variables
+      run: |
+        echo "VERSION is: ${{ env.VERSION }}"
+        echo "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
+        if [ -z "${{ env.OUTPUT_NAME }}" ]; then
+           echo "::error::OUTPUT_NAME environment variable is not set or is empty after extraction!"
+           exit 1
+        fi
 
     - name: Build macOS App
       run: |
-        pyinstaller --onefile --name ${{ env.OUTPUT_NAME }} --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
-        # 确保可执行文件有正确的权限
-        chmod +x dist/${{ env.OUTPUT_NAME }}
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
+        # Ensure the output file is executable
+        chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
       with:
         name: macos-executable
-        path: dist/${{ env.OUTPUT_NAME }}
+        path: dist/${{ env.OUTPUT_NAME }} # Path to the executable created by PyInstaller
 
   create-release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos] # Run after both builds succeed
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Needed to create tags and releases
+
+    # Need to explicitly get the version again, as env vars aren't automatically shared between jobs unless passed via outputs
+    # Or, ensure it's set correctly in both build jobs and rely on GITHUB_ENV persistence for the release step context (less reliable for complex flows)
+    # A safer way is to pass it via job outputs, but using GITHUB_ENV is simpler if it works reliably across job needs.
+    # Let's try relying on GITHUB_ENV being set by the build jobs first.
 
     steps:
+      # Need checkout to run python script again or to tag
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Re-extract version here to be certain it's available for release naming/tagging
+      - name: Extract version for Release
+        id: get_version_release
+        run: |
+          VERSION_STR=$(python app/__init__.py -v)
+          if [ -z "$VERSION_STR" ]; then
+            echo "::error::Failed to extract version from app/__init__.py -v for release"
+            exit 1
+          fi
+          echo "VERSION=$VERSION_STR" >> $GITHUB_ENV
+          echo "WINDOWS_FILENAME=${{ env.APP_NAME }}-windows-v$VERSION_STR.exe" >> $GITHUB_ENV
+          echo "MACOS_FILENAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV
+          echo "Release Version: $VERSION_STR"
+
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-executable
-          path: windows-build
+          path: artifacts # Download all artifacts to a common directory
 
       - name: Download macOS Artifact
         uses: actions/download-artifact@v4
         with:
           name: macos-executable
-          path: macos-build
+          path: artifacts # Download all artifacts to a common directory
 
-      - name: Set Git User
+      # Verify downloaded files exist before proceeding
+      - name: Verify Downloaded Artifacts
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          echo "Checking for Windows artifact: artifacts/${{ env.WINDOWS_FILENAME }}"
+          ls -l artifacts/
+          if [ ! -f "artifacts/${{ env.WINDOWS_FILENAME }}" ]; then
+            echo "::error::Windows artifact not found after download!"
+            exit 1
+          fi
+          echo "Checking for macOS artifact: artifacts/${{ env.MACOS_FILENAME }}"
+          if [ ! -f "artifacts/${{ env.MACOS_FILENAME }}" ]; then
+            echo "::error::macOS artifact not found after download!"
+            exit 1
+          fi
+
 
       - name: Check if Release Exists
         id: check_release
-        uses: octokit/rest.js-action@v2
+        uses: actions/github-script@v7 # Use github-script for easier API calls
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          method: GET
-          url: /repos/${{ github.repository }}/releases
-        env:
-          VERSION: ${{ env.VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const tag_name = "v${{ env.VERSION }}";
+            try {
+              const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag: tag_name });
+              console.log(`Release ${tag_name} already exists.`);
+              return { release_exists: true };
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Release ${tag_name} does not exist yet.`);
+                return { release_exists: false };
+              } else {
+                console.error(`Error checking release: ${error.message}`);
+                throw error;
+              }
+            }
+        outputs:
+          release_exists: ${{ steps.check_release.outputs.result.release_exists }}
 
-      - name: Filter Existing Releases
-        id: filter_releases
-        run: |
-          EXISTING_RELEASE=$(echo '${{ steps.check_release.outputs.result }}' | jq -r '.[] | select(.tag_name == "v${{ env.VERSION }}") | .tag_name')
-          if [ -n "$EXISTING_RELEASE" ]; then
-            echo "::set-output name=release_exists::true"
-            echo "Release v${{ env.VERSION }} already exists. Skipping release creation."
-          else
-            echo "::set-output name=release_exists::false"
-          fi
-
-      - name: Create Git Tag
-        if: steps.filter_releases.outputs.release_exists == 'false'
-        run: |
-          git tag -d "v${{ env.VERSION }}" || true
-          git push origin --delete "v${{ env.VERSION }}" || true
-          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
-          git push origin "v${{ env.VERSION }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
-        if: steps.filter_releases.outputs.release_exists == 'false'
+        if: steps.check_release.outputs.release_exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
           body: |
-            Windows: ${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
-            macOS: ${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
+            Automated release for version ${{ env.VERSION }}.
+
+            **Downloads:**
+            * Windows: `${{ env.WINDOWS_FILENAME }}`
+            * macOS: `${{ env.MACOS_FILENAME }}`
           draft: false
           prerelease: false
           files: |
-            windows-build/${{ env.APP_NAME }}-windows-v${{ env.VERSION }}.exe
-            macos-build/${{ env.APP_NAME }}-macos-v${{ env.VERSION }}
+            artifacts/${{ env.WINDOWS_FILENAME }}
+            artifacts/${{ env.MACOS_FILENAME }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token is implicitly passed by softprops action
