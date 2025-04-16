@@ -1,4 +1,4 @@
-__versions__ = "0.0.3"
+__versions__ = "0.0.4"
 
 
 # 如果参数是 --version 或 -v，打印版本号
