@@ -31,6 +31,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
+        pip install noneprompt
+        pip install PyYAML
+        pip install requests
+        pip install qrcode
+        pip install loguru
+        pip install pillow
       shell: pwsh # Use PowerShell
 
     - name: Extract version from __init__.py
@@ -91,6 +97,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
+        pip install noneprompt
+        pip install PyYAML
+        pip install requests
+        pip install qrcode
+        pip install loguru
+        pip install pillow
 
     - name: Extract version from __init__.py
       id: get_version
