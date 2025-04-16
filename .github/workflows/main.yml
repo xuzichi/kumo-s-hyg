@@ -9,7 +9,7 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 关键修复：添加权限
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -34,7 +34,12 @@ jobs:
       run: |
         pyinstaller --onefile --name your_app_name --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
 
-    - name: Create Git Tag (可选，确保标签存在)
+    - name: Set Git User (修复 Git 身份问题)
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+
+    - name: Create Git Tag
       run: |
         git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
         git push origin "v${{ env.VERSION }}"
@@ -42,7 +47,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create Release
-      uses: softprops/action-gh-release@v2  # 改用 v2
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ env.VERSION }}
         name: Release v${{ env.VERSION }}
@@ -53,6 +58,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload executable to Release
-      uses: softprops/action-gh-release@v2  # 改用 v2
+      uses: softprops/action-gh-release@v2
       with:
-        files: dist/your_app_name*  # 确保路径匹配
+        files: dist/your_app_name*
