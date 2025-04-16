@@ -1,25 +1,27 @@
-name: Build and Release Multi-Platform
+name: Build and Release Multi-Platform on Version Change
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'app/__init__.py' # 只有当这个文件改变时才触发
 
 env:
   APP_NAME: khyg
-  # Version number will be dynamically set in the Extract version step
+  # 版本号将在“Extract version”步骤中动态设置
 
 jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write # Needed to upload artifacts
+      contents: write # 需要上传构建产物
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Fetch all history for version extraction/tagging
+        fetch-depth: 0 # 获取所有历史记录以提取/标记版本
         fetch-tags: true
 
     - name: Set up Python
@@ -37,7 +39,7 @@ jobs:
         pip install qrcode
         pip install loguru
         pip install pillow
-      shell: pwsh # Use PowerShell
+      shell: pwsh # 使用 PowerShell
 
     - name: Extract version from __init__.py
       id: get_version
@@ -47,14 +49,14 @@ jobs:
           Write-Error "Failed to extract version from app/__init__.py -v"
           exit 1
         }
-        # Set environment variables for subsequent steps in this job and for create-release job needs
-        echo "VERSION=$VERSION_STR" >> $env:GITHUB_ENV # Use PowerShell syntax for Windows runner
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$VERSION_STR" >> $env:GITHUB_ENV # Use PowerShell syntax
+        # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
+        echo "VERSION=$VERSION_STR" >> $env:GITHUB_ENV # Windows runner 使用 PowerShell 语法
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$VERSION_STR" >> $env:GITHUB_ENV # 使用 PowerShell 语法
         Write-Host "Extracted Version: $VERSION_STR"
         Write-Host "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-windows-v$VERSION_STR"
-      shell: pwsh # Use PowerShell
+      shell: pwsh # 使用 PowerShell
 
-    - name: Verify Environment Variables # Added verification step
+    - name: Verify Environment Variables # 添加了验证步骤
       run: |
         Write-Host "VERSION is: ${{ env.VERSION }}"
         Write-Host "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
@@ -67,19 +69,18 @@ jobs:
     - name: Build Windows EXE
       run: |
         pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
-        # Redundant mv command removed
-      shell: pwsh # Use PowerShell
+      shell: pwsh # 使用 PowerShell
 
     - name: Upload Windows Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: windows-executable
-        path: dist/${{ env.OUTPUT_NAME }}.exe # Path to the executable created by PyInstaller
+        name: windows-executable-${{ env.VERSION }} # 为构建产物添加版本号以避免冲突
+        path: dist/${{ env.OUTPUT_NAME }}.exe # PyInstaller 创建的可执行文件的路径
 
   build-macos:
     runs-on: macos-latest
     permissions:
-      contents: write # Needed to upload artifacts
+      contents: write # 需要上传构建产物
 
     steps:
     - name: Checkout repository
@@ -112,9 +113,9 @@ jobs:
           echo "::error::Failed to extract version from app/__init__.py -v"
           exit 1
         fi
-        # Set environment variables for subsequent steps in this job and for create-release job needs
-        echo "VERSION=$VERSION_STR" >> $GITHUB_ENV # Use Bash syntax for macOS runner
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV # Use Bash syntax
+        # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
+        echo "VERSION=$VERSION_STR" >> $GITHUB_ENV # macOS runner 使用 Bash 语法
+        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV # 使用 Bash 语法
         echo "Extracted Version: $VERSION_STR"
         echo "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-macos-v$VERSION_STR"
 
@@ -123,41 +124,43 @@ jobs:
         echo "VERSION is: ${{ env.VERSION }}"
         echo "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
         if [ -z "${{ env.OUTPUT_NAME }}" ]; then
-           echo "::error::OUTPUT_NAME environment variable is not set or is empty after extraction!"
-           exit 1
+            echo "::error::OUTPUT_NAME environment variable is not set or is empty after extraction!"
+            exit 1
         fi
 
     - name: Build macOS App
       run: |
         pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
-        # Ensure the output file is executable
+        # 确保输出文件可执行
         chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: macos-executable
-        path: dist/${{ env.OUTPUT_NAME }} # Path to the executable created by PyInstaller
+        name: macos-executable-${{ env.VERSION }} # 为构建产物添加版本号以避免冲突
+        path: dist/${{ env.OUTPUT_NAME }} # PyInstaller 创建的可执行文件的路径
 
   create-release:
-    needs: [build-windows, build-macos] # Run after both builds succeed
+    needs: [build-windows, build-macos] # 在两个构建都成功后运行
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Needed to create tags and releases
+      contents: write # 需要创建标签和发布
 
     steps:
-      # Need checkout to run python script again or to tag
+      # 需要 checkout 才能再次运行 python 脚本或进行标记
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      # Re-extract version here to be certain it's available for release naming/tagging
+      # 在此处重新提取版本以确保其可用于发布命名/标记
       - name: Extract version for Release
         id: get_version_release
         run: |
-          VERSION_STR=$(python app/__init__.py -v)
+          # 需要先安装 python 环境才能执行脚本
+          sudo apt-get update && sudo apt-get install -y python3 python3-pip
+          VERSION_STR=$(python3 app/__init__.py -v)
           if [ -z "$VERSION_STR" ]; then
             echo "::error::Failed to extract version from app/__init__.py -v for release"
             exit 1
@@ -170,16 +173,16 @@ jobs:
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-executable
-          path: artifacts # Download all artifacts to a common directory
+          name: windows-executable-${{ env.VERSION }} # 使用带版本号的名称下载
+          path: artifacts # 将所有构建产物下载到通用目录
 
       - name: Download macOS Artifact
         uses: actions/download-artifact@v4
         with:
-          name: macos-executable
-          path: artifacts # Download all artifacts to a common directory
+          name: macos-executable-${{ env.VERSION }} # 使用带版本号的名称下载
+          path: artifacts # 将所有构建产物下载到通用目录
 
-      # Verify downloaded files exist before proceeding
+      # 在继续之前验证下载的文件是否存在
       - name: Verify Downloaded Artifacts
         run: |
           echo "Checking for Windows artifact: artifacts/${{ env.WINDOWS_FILENAME }}"
@@ -194,32 +197,10 @@ jobs:
             exit 1
           fi
 
-      - name: Check if Release Exists
-        id: check_release
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { owner, repo } = context.repo;
-            const tag_name = "v${{ env.VERSION }}";
-            try {
-              const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag: tag_name });
-              console.log(`Release ${tag_name} already exists.`);
-              return { release_exists: true }; // Output is set here
-            } catch (error) {
-              if (error.status === 404) {
-                console.log(`Release ${tag_name} does not exist yet.`);
-                return { release_exists: false }; // Output is set here
-              } else {
-                console.error(`Error checking release: ${error.message}`);
-                throw error;
-              }
-            }
-        # Invalid 'outputs:' block removed from here
+      # --- 移除了 'Check if Release Exists' 步骤 ---
 
       - name: Create Release
-        # Use fromJson() to correctly parse the JSON string output from github-script
-        if: fromJson(steps.check_release.outputs.result).release_exists == false
+        # --- 移除了 if 条件 ---
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
