@@ -106,7 +106,6 @@ jobs:
         echo "Extracted Version: $VERSION_STR"
         echo "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-macos-v$VERSION_STR"
 
-    # Optional: Add a step to verify the env var was set
     - name: Verify Environment Variables
       run: |
         echo "VERSION is: ${{ env.VERSION }}"
@@ -133,11 +132,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Needed to create tags and releases
-
-    # Need to explicitly get the version again, as env vars aren't automatically shared between jobs unless passed via outputs
-    # Or, ensure it's set correctly in both build jobs and rely on GITHUB_ENV persistence for the release step context (less reliable for complex flows)
-    # A safer way is to pass it via job outputs, but using GITHUB_ENV is simpler if it works reliably across job needs.
-    # Let's try relying on GITHUB_ENV being set by the build jobs first.
 
     steps:
       # Need checkout to run python script again or to tag
@@ -188,10 +182,9 @@ jobs:
             exit 1
           fi
 
-
       - name: Check if Release Exists
         id: check_release
-        uses: actions/github-script@v7 # Use github-script for easier API calls
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -200,22 +193,21 @@ jobs:
             try {
               const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag: tag_name });
               console.log(`Release ${tag_name} already exists.`);
-              return { release_exists: true };
+              return { release_exists: true }; // Output is set here
             } catch (error) {
               if (error.status === 404) {
                 console.log(`Release ${tag_name} does not exist yet.`);
-                return { release_exists: false };
+                return { release_exists: false }; // Output is set here
               } else {
                 console.error(`Error checking release: ${error.message}`);
                 throw error;
               }
             }
-        outputs:
-          release_exists: ${{ steps.check_release.outputs.result.release_exists }}
-
+        # Invalid 'outputs:' block removed from here
 
       - name: Create Release
-        if: steps.check_release.outputs.release_exists == 'false'
+        # Use fromJson() to correctly parse the JSON string output from github-script
+        if: fromJson(steps.check_release.outputs.result).release_exists == false
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
@@ -232,4 +224,4 @@ jobs:
             artifacts/${{ env.WINDOWS_FILENAME }}
             artifacts/${{ env.MACOS_FILENAME }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token is implicitly passed by softprops action
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
