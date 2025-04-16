@@ -66,7 +66,7 @@ jobs:
 
     - name: Build Windows EXE
       run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
         # Redundant mv command removed
       shell: pwsh # Use PowerShell
 
@@ -129,7 +129,7 @@ jobs:
 
     - name: Build macOS App
       run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import PyYAML --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
         # Ensure the output file is executable
         chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
