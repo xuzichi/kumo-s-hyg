@@ -1,8 +1,11 @@
-.config/
 .venv/
 .log/
 
-
+.DS_Store
+.github/
+_app_old/
+app/.DS_Store
+config/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,2 +1,4 @@
-import runpy
-runpy.run_module('app', run_name='__main__')
+import app
+from app import __main__
+
+
