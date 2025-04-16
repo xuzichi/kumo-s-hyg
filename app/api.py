@@ -182,6 +182,24 @@ class Api:
         url = f'https://show.bilibili.com/api/ticket/project/infoByDate?id={project_id}&date={date}'
         return Api._make_api_call('GET', url, self.headers)
 
+
+    def logout(self):        
+        url = "https://passport.bilibili.com/login/exit/v2"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+        }
+        data={
+            "biliCSRF": self.headers["Cookie"][
+                self.headers["Cookie"].index("bili_jct") + 9 : self.headers[
+                    "Cookie"
+                ].index("bili_jct")
+                + 41
+            ]
+        }
+        return Api._make_api_call('POST', url, headers, data=data)
+    
+            
+            
     @staticmethod
     def qr_login() -> str:
         
