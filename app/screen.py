@@ -85,7 +85,7 @@ class Main:
                     choices=[Choice(f.name, data=f) for f in config_files]
                 ).prompt()
                 
-                with open(file.data, "r") as f:
+                with open(file.data, "r", encoding="utf-8") as f:
                     try:
                         self.cookie = yaml.safe_load(f)['cookie']
                     except Exception as e:  
@@ -221,13 +221,13 @@ cookie: {self.cookie}
             ).prompt()
             if _.data == "no":
                 return
-        with open(f"config/{config_name}.yml", "w") as f:
+        with open(f"config/{config_name}.yml", "w", encoding="utf-8") as f:
             f.write(config_str)
         logger.success(f'配置文件已保存为 {config_name}.yml')
         logger.opt(colors=True).info('运行配置前请先修改配置文件以设置抢票信息, yaml语法参见 <green>https://www.runoob.com/w3cnote/yaml-intro.html</green>.')
             
     def run_by_config(self, config_name):
-        with open(config_name, "r") as f:
+        with open(config_name, "r", encoding="utf-8") as f:
             try:
                 config = yaml.safe_load(f)
                 self.api.set_cookie(config['cookie'])
