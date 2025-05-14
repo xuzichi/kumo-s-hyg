@@ -159,7 +159,7 @@ jobs:
         run: |
           # 需要先安装 python 环境才能执行脚本
           sudo apt-get update && sudo apt-get install -y python3 python3-pip
-          VERSION_STR=$(python run.py -v
+          VERSION_STR=$(python run.py -v)
           if [ -z "$VERSION_STR" ]; then
             echo "::error::Failed to extract version from python run.py -v"
             exit 1
