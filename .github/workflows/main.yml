@@ -44,9 +44,9 @@ jobs:
     - name: Extract version from __init__.py
       id: get_version
       run: |
-        $VERSION_STR = python -m app -v
+        $VERSION_STR = python run.py -v
         if (-not $VERSION_STR) {
-          Write-Error "Failed to extract version from app/__init__.py -v"
+          Write-Error "Failed to extract version from python run.py -v"
           exit 1
         }
         # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
