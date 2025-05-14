@@ -8,7 +8,7 @@ from app.screen import Main
 
 from .api import Api
 
-__versions__ = "0.0.5"
+__versions__ = "0.0.6"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
