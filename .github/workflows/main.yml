@@ -41,7 +41,7 @@ jobs:
         pip install pillow
       shell: pwsh # 使用 PowerShell
 
-    - name: Extract version from __init__.py
+    - name: Extract version from __main__.py
       id: get_version
       run: |
         $VERSION_STR = python run.py -v
@@ -105,13 +105,12 @@ jobs:
         pip install loguru
         pip install pillow
 
-    - name: Extract version from __init__.py
+    - name: Extract version from __main__.py
       id: get_version
       run: |
-        VERSION_STR=$(python app/__init__.py -v)
+        VERSION_STR=$(python run.py -v)
         if [ -z "$VERSION_STR" ]; then
-          echo "::error::Failed to extract version from app/__init__.py -v"
-          exit 1
+          echo "::error::Failed to extract version from python run.py -v"
         fi
         # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
         echo "VERSION=$VERSION_STR" >> $GITHUB_ENV # macOS runner 使用 Bash 语法
@@ -160,9 +159,9 @@ jobs:
         run: |
           # 需要先安装 python 环境才能执行脚本
           sudo apt-get update && sudo apt-get install -y python3 python3-pip
-          VERSION_STR=$(python3 app/__init__.py -v)
+          VERSION_STR=$(python run.py -v
           if [ -z "$VERSION_STR" ]; then
-            echo "::error::Failed to extract version from app/__init__.py -v for release"
+            echo "::error::Failed to extract version from python run.py -v"
             exit 1
           fi
           echo "VERSION=$VERSION_STR" >> $GITHUB_ENV
