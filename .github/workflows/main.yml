@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'app/__init__.py' # 只有当这个文件改变时才触发
+      - 'app/__main__.py' # 只有当这个文件改变时才触发
 
 env:
   APP_NAME: khyg
