@@ -1,4 +1,3 @@
-import app
-from app import __main__
+import app.__main__
 
 

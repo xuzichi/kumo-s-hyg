@@ -21,11 +21,14 @@ from .api import Api
 
 
 
+range
+
+
 class Main:
     def __init__(self):
         self.cookie: str = None
         self.api = Api()
-        logger.opt(colors=True).info('Welcome1 <green>khyg</green> v0.0.1')
+        logger.opt(colors=True).info('We1c0me <green>khyg</green> v0.0.1')
         if not Path("config").exists():            
             Path("config").mkdir(parents=True, exist_ok=True)
             
@@ -193,7 +196,6 @@ setting: # 常规配置, 根据需求修改
   interval: 0.33  # 全局尝试订单请求间隔, 太快可能会被 412 风控.
   in_stock: false  # 回流模式, 无票时添加一个轮训间隔, 抢票模式下请设置为 false. 
   in_stock_interval: 10  # 回流模式轮训间隔, 太快可能会被 412 风控.
-  errno_3_interval: 4.96  # [请慢一点] 时轮训间隔, 不建议修改此项; [请慢一点] 是按照身份证组合, 在 5s 内无视所有相同身份证组合购买请求, 不论账号是否相同.
 
 # ==========================
 cookie: {self.cookie}
@@ -224,6 +226,36 @@ cookie: {self.cookie}
         logger.success(f'配置文件已保存为 {config_name}.yml')
         logger.opt(colors=True).info('运行配置前请先修改配置文件以设置抢票信息, yaml语法参见 <green>https://www.runoob.com/w3cnote/yaml-intro.html</green>.')
             
+    def run_by_config(self, config_name):
+        with open(config_name, "r") as f:
+            try:
+                config = yaml.safe_load(f)
+                self.api.set_cookie(config['cookie'])
+                my_info_json = self.api.my_info()
+                if my_info_json['code'] == -101:
+                    logger.error("cookie已实效, 请重新登录.")
+                    return
+                logger.opt(colors=True).info(f'登录用户: <green>{my_info_json["data"]["profile"]["name"]}</green>')
+            except Exception as e:  
+                logger.error("读取配置文件失败, 请检查配置文件格式")
+                raise e
+                return
+            try:
+                Logic(
+                    order=Order(
+                        cookie=config['cookie'],
+                        project_id=config['project_id']
+                        ),
+                    config=config,
+                    ).run()
+            except CancelledError:
+                return
+            except KeyboardInterrupt:
+                return
+            except Exception as e:
+                import traceback
+                print(traceback.format_exc())
+                raise e
 
     def run_config_np(self):
         config_files = list(Path("config").glob("*.yml"))
@@ -236,46 +268,6 @@ cookie: {self.cookie}
             choices=[Choice(f.name, data=f) for f in config_files]
         ).prompt()
         config_name = file.data
-        with open(config_name, "r") as f:
-            try:
-                yml_run = yaml.safe_load(f)
-                self.api.set_cookie(yml_run['cookie'])
-                my_info_json = self.api.my_info()
-                if my_info_json['code'] == -101:
-                    logger.error("cookie已实效, 请重新登录.")
-                    return
-                logger.opt(colors=True).info(f'登录用户: <green>{my_info_json["data"]["profile"]["name"]}</green>')
-            except Exception as e:  
-                logger.error("读取配置文件失败, 请检查配置文件格式")
-                raise e
-                return
-            try:
-                # try:
-                _ = ListPrompt(
-                    "请认真核对信息后, 选择启动方式:",
-                    choices=[
-                        Choice("常规启动", data="main"),
-                        # Choice("后台运行(多线程)", data="thread"),
-                        Choice('取消', data="cancel"),
-                    ],
-                ).prompt()
-                if _.data == 'cancel':
-                    return
-                elif _.data == 'main':
-                    Logic(
-                        order=Order(
-                            cookie=yml_run['cookie'],
-                            project_id=yml_run['project_id']
-                            ),
-                        config_name=config_name,
-                        ).run()
-            except CancelledError:
-                return
-            except KeyboardInterrupt:
-                return
-            except Exception as e:
-                import traceback
-                print(traceback.format_exc())
-                raise e
-            
-            
+        self.run_by_config(config_name)
+        
+        

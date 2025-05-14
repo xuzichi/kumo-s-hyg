@@ -81,17 +81,29 @@ class Api:
         self.headers["Cookie"] = cookie
         
     @staticmethod
-    def _make_api_call(method: str, url: str, headers: dict, data=None, params=None, timeout: int = 120) -> Optional[dict]:
+    def _make_api_call(method: str, url: str, headers: dict, json=None, params=None, timeout: int = 120) -> Optional[dict]:
         try:
             if method.upper() == 'GET':
                 response = requests.get(url, headers=headers, params=params, timeout=timeout)
             elif method.upper() == 'POST':
-                response = requests.post(url, headers=headers, data=data, timeout=timeout)
-            response.raise_for_status()  # Raise an exception for HTTP errors
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=json,  # 用于JSON数据
+                    timeout=timeout
+                )
+                try:
+                    logger.debug(f"POST {url} {json}")
+                    logger.debug(f"Response: {response.text}")
+                    logger.debug(f"Response: {response.status_code}")
+                except Exception as e:
+                    logger.error(f"Error logging response: {e}")
+            
+            response.raise_for_status()  # 检查HTTP错误
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"API request failed for {url}: {e}")
-            return None
+            logger.error(f"API request failed for {url}: {e}")
+            raise
 
     def project(self, project_id)-> "ProjectJson":
         return Api._make_api_call('GET', f'https://show.bilibili.com/api/ticket/project/getV2?id={project_id}', self.headers)
@@ -109,30 +121,32 @@ class Api:
     def prepare(self,  project_id, count, screen_id, sku_id) -> "prepareJson":
         url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
         payload = {
-            "project_id": str(project_id),
-            "count": str(count),
-            "order_type": "1",
-            "screen_id": str(screen_id),
-            "sku_id": str(sku_id),
+            "project_id": project_id,
+            "count": count,
+            "order_type": 1,
+            "screen_id": screen_id,
+            "sku_id": sku_id,
             "token": "",
-            "newRisk": "true",
-            "ignoreRequestLimit": "true",
+            "newRisk": True,
+            "ignoreRequestLimit": True,
             "requestSource": "neul-next",
         }
-        json_payload = urlencode(payload).replace("%27true%27", "true").replace("%27", "%22").encode()
-        _headers = self.headers.copy()
-        _headers['Content-Type'] = 'application/x-www-form-urlencoded'
-        return Api._make_api_call('POST', url, _headers, data=json_payload)
+        return Api._make_api_call('POST', url, self.headers, json=payload)
 
     def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, deliver_info=None, buyer=None, tel=None) -> "createJson":
+        logger.debug(f" project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money} buyer_info: {buyer_info} deliver_info: {deliver_info} buyer: {buyer} tel: {tel}")
+        
         payload = {
-            "buyer_info": buyer_info,
-            "count": str(count),
+            "buyer_info": json.dumps(buyer_info).replace("'", "\\'"),
+            "count": count,
             "pay_money": pay_money * count,
-            "project_id": str(project_id),
+            "project_id": project_id,
             "screen_id": screen_id,
             "sku_id": sku_id,
             "timestamp": int(round(time.time() * 1000)),
+            "order_type": 1,
+            "deviceId": "",
+            "newRisk": True,
             "token": token,
             "deviceId": "",
         }
@@ -143,21 +157,15 @@ class Api:
             payload["buyer"] = buyer
             payload["tel"] = tel
 
-        json_payload = urlencode(payload).replace("%27true%27", "true").replace("%27", "%22").encode()
         url = f"https://show.bilibili.com/api/ticket/order/createV2?project_id={project_id}"
-        _headers = self.headers.copy()
-        _headers['Content-Type'] = 'application/x-www-form-urlencoded'
-        return Api._make_api_call('POST', url, _headers, data=json_payload)
+        return Api._make_api_call('POST', url, self.headers, json=payload)
 
     def gaia_vgate_register( self, prepare_json: "prepareJson") -> dict:
         url = f"https://api.bilibili.com/x/gaia-vgate/v1/register"
         payload = {
             'data': prepare_json["data"]["ga_data"]["riskParams"],
         }
-        json_payload = urlencode(payload).replace("%27true%27", "true").replace("%27", "%22").encode()
-        _headers = self.headers.copy()
-        _headers['Content-Type'] = 'application/x-www-form-urlencoded'
-        return Api._make_api_call('POST', url, _headers, data=json_payload)
+        return Api._make_api_call('POST', url, self.headers, json=payload)
 
     def my_info(self,  ) -> "myInfoJson":
         url = 'https://api.bilibili.com/x/space/v2/myinfo?web_location=333.1387'

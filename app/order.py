@@ -71,27 +71,21 @@ class Order:
         
         project_json = self.api.project(project_id=self.project_id)
         project_str = json.dumps(project_json, ensure_ascii=False)
-        
-        if 'buyer_index' in config and config['buyer_index']:
-            if '一单一证' in project_str:
-                buyer_index_list = config['buyer_index']
-            elif '一人一证' in project_str:
-                buyer_index_list = [config['buyer_index'][0]]
-            buyer_json = self.api.buyer()
-
         screen_idx, ticket_idx = config['screen_ticket'][0]
 
         if 'buyer_index' in config and config['buyer_index']:
             if '一单一证' in project_str:
+                logger.debug(f"实名制, 选择单个购票人: {config['buyer_index']}")
                 buyer_index_list = config['buyer_index']
             elif '一人一证' in project_str:
+                logger.debug(f"实名制, 选择单个/多个购票人: {config['buyer_index']}")
                 buyer_index_list = [config['buyer_index'][0]]
             buyer_json = self.api.buyer()
             
             buyer_info_list = []
             for i in buyer_index_list:
                 buyer_info_raw: dict = buyer_json['data']["list"][i]
-                buyer_info_raw.update({'isBuyerInfoVerified': 'true', 'isBuyerValid': 'true'}) 
+                buyer_info_raw.update({'isBuyerInfoVerified': True, 'isBuyerValid': True}) 
                 buyer_info_dict = buyer_info_raw
                 buyer_info_list.append(buyer_info_dict)
                 
@@ -99,6 +93,7 @@ class Order:
             self.count = len(self.buyer_info)
             
         elif 'address_index' in config and config['address_index']:
+            logger.debug(f"非实名制, 选择地址: {config['address_index'][0]}")
             address_index = config['address_index'][0]
             address_json = self.api.address()            # 非实名制
             self.buyer = address_json['data']['addr_list'][address_index]['name']
@@ -107,20 +102,24 @@ class Order:
 
         # 构建票种信息
         if project_json['data']['sales_dates'] != []: # 存在小日历
+            logger.debug(f"存在小日历, 选择日期: {config['sales_date'][0]}")
             project_json_4_ticket = self.api.project_info_by_date(project_id=self.project_id, date=config['sales_date'][0])
         else:
             project_json_4_ticket = project_json
         
+        # print(project_json_4_ticket)
         self.screen_id = project_json_4_ticket['data']['screen_list'][screen_idx]['id']
         self.sku_id = project_json_4_ticket['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['id']
         self.pay_money = project_json_4_ticket['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['price']
 
         # 纸质票 处理 快递费
         if project_json['data']['has_paper_ticket'] and (express_fee := project_json["data"]['screen_list'][screen_idx]['express_fee']):
+            logger.debug(f"快递费: {express_fee}")
             if express_fee != -1: # free
                 self.pay_money += express_fee
         # 纸质票 处理 地址
         if project_json["data"]['screen_list'][screen_idx]['delivery_type'] == 3: # 需要地址
+            logger.debug(f"质票 处理 地址: {project_json['data']['screen_list'][screen_idx]['delivery_type']}")
             self.deliver_info = {
                 "name": address_json["data"]["addr_list"][0]["name"],
                 "tel": address_json["data"]["addr_list"][0]["phone"],
@@ -132,32 +131,35 @@ class Order:
         self.sale_start = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleStart']
         self.sale_end = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleEnd']
 
-    def prepare(self) -> prepareJson:
+    def prepare(self) -> Optional[prepareJson]:
         prepare_json = self.api.prepare(
             project_id=self.project_id,
             count=self.count,
             screen_id=self.screen_id,
             sku_id=self.sku_id
         )
-        if prepare_json["errno"] == 0:
-            self.token = prepare_json["data"]["token"]
-            return prepare_json
-        else:
-            logger.opt(colors=True).error(f"获取确认信息失败: {prepare_json['errno']}, {prepare_json['msg']}")
-            return prepare_json
+        try:
+            if prepare_json["errno"] == 0:
+                self.token = prepare_json["data"]["token"]
+                return prepare_json
+            return 
+        except Exception as e:
+            return 
       
-    def confirm(self) -> confirmJson:
+    def confirm(self) -> Optional[confirmJson]:
         confirm_json = self.api.confirm(
             project_id=self.project_id,
             token=self.token,
             voucher="",
             request_source="pc-new"
         )
-        if confirm_json["errno"] == 0:
-            logger.opt(colors=True).success(f"获取确认信息成功, token: {self.token}")
-        else:
-            logger.opt(colors=True).error(f"获取确认信息失败: {confirm_json['errno']}, {confirm_json['msg']}")
-        return confirm_json
+        
+        try:
+            if confirm_json["errno"] == 0:
+                return confirm_json
+            return
+        except Exception as e:
+            return 
     
     def create(self) -> createJson:
         create_json = self.api.create(
