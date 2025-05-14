@@ -9,79 +9,15 @@ on:
 
 env:
   APP_NAME: khyg
-  # 版本号将在“Extract version”步骤中动态设置
 
 jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
       contents: write # 需要上传构建产物
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # 获取所有历史记录以提取/标记版本
-        fetch-tags: true
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install noneprompt
-        pip install PyYAML
-        pip install requests
-        pip install qrcode
-        pip install loguru
-        pip install pillow
-      shell: pwsh # 使用 PowerShell
-
-    - name: Extract version from __main__.py
-      id: get_version
-      run: |
-        $VERSION_STR = python run.py -v
-        if (-not $VERSION_STR) {
-          Write-Error "Failed to extract version from python run.py -v"
-          exit 1
-        }
-        # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
-        echo "VERSION=$VERSION_STR" >> $env:GITHUB_ENV # Windows runner 使用 PowerShell 语法
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-windows-v$VERSION_STR" >> $env:GITHUB_ENV # 使用 PowerShell 语法
-        Write-Host "Extracted Version: $VERSION_STR"
-        Write-Host "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-windows-v$VERSION_STR"
-      shell: pwsh # 使用 PowerShell
-
-    - name: Verify Environment Variables # 添加了验证步骤
-      run: |
-        Write-Host "VERSION is: ${{ env.VERSION }}"
-        Write-Host "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
-        if (-not $env:OUTPUT_NAME) {
-          Write-Error "OUTPUT_NAME environment variable is not set or is empty after extraction!"
-          exit 1
-        }
-      shell: pwsh
-
-    - name: Build Windows EXE
-      run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
-      shell: pwsh # 使用 PowerShell
-
-    - name: Upload Windows Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-executable-${{ env.VERSION }} # 为构建产物添加版本号以避免冲突
-        path: dist/${{ env.OUTPUT_NAME }}.exe # PyInstaller 创建的可执行文件的路径
-
-  build-macos:
-    runs-on: macos-latest
-    permissions:
-      contents: write # 需要上传构建产物
-
+    outputs: # 定义作业输出
+      version: ${{ steps.get_version.outputs.version_str }}
+      output_name: ${{ steps.get_version.outputs.output_name_str }} # 输出构建产物的名称
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -97,26 +33,100 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install noneprompt
-        pip install PyYAML
-        pip install requests
-        pip install qrcode
-        pip install loguru
-        pip install pillow
+        pip install pyinstaller noneprompt PyYAML requests qrcode loguru pillow
+      shell: pwsh # 使用 PowerShell
 
     - name: Extract version from __main__.py
-      id: get_version
+      id: get_version # 给步骤一个 ID 以便引用其输出
       run: |
-        VERSION_STR=$(python run.py -v)
-        if [ -z "$VERSION_STR" ]; then
+        $extracted_version = python run.py -v
+        if (-not $extracted_version) {
+          Write-Error "Failed to extract version from python run.py -v"
+          exit 1
+        }
+        $output_file_name = "${{ env.APP_NAME }}-windows-v$extracted_version"
+        
+        # 设置环境变量供当前作业后续步骤使用
+        echo "VERSION=$extracted_version" >> $env:GITHUB_ENV
+        echo "OUTPUT_NAME=$output_file_name" >> $env:GITHUB_ENV
+        
+        # 设置作业输出，供其他作业使用
+        echo "version_str=$extracted_version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        echo "output_name_str=$output_file_name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+        Write-Host "Extracted Version: $extracted_version"
+        Write-Host "Set OUTPUT_NAME to: $output_file_name"
+        Write-Host "Set job output version_str to: $extracted_version"
+        Write-Host "Set job output output_name_str to: $output_file_name"
+      shell: pwsh
+
+    - name: Verify Environment Variables
+      run: |
+        Write-Host "VERSION is: ${{ env.VERSION }}"
+        Write-Host "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
+        if (-not $env:OUTPUT_NAME) {
+          Write-Error "OUTPUT_NAME environment variable is not set or is empty after extraction!"
+          exit 1
+        }
+      shell: pwsh
+
+    - name: Build Windows EXE
+      run: |
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app;app" run.py
+      shell: pwsh
+
+    - name: Upload Windows Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
+        path: dist/${{ steps.get_version.outputs.output_name_str }}.exe # 使用步骤输出的文件名
+
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    outputs: # 定义作业输出
+      version: ${{ steps.get_version.outputs.version_str }}
+      output_name: ${{ steps.get_version.outputs.output_name_str }} # 输出构建产物的名称
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller noneprompt PyYAML requests qrcode loguru pillow
+
+    - name: Extract version from __main__.py
+      id: get_version # 给步骤一个 ID
+      run: |
+        EXTRACTED_VERSION=$(python run.py -v)
+        if [ -z "$EXTRACTED_VERSION" ]; then
           echo "::error::Failed to extract version from python run.py -v"
+          exit 1 # 确保在提取失败时作业失败
         fi
-        # 为此作业中的后续步骤以及 create-release 作业需求设置环境变量
-        echo "VERSION=$VERSION_STR" >> $GITHUB_ENV # macOS runner 使用 Bash 语法
-        echo "OUTPUT_NAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV # 使用 Bash 语法
-        echo "Extracted Version: $VERSION_STR"
-        echo "Set OUTPUT_NAME to: ${{ env.APP_NAME }}-macos-v$VERSION_STR"
+        OUTPUT_FILE_NAME="${{ env.APP_NAME }}-macos-v$EXTRACTED_VERSION"
+        
+        # 设置环境变量供当前作业后续步骤使用
+        echo "VERSION=$EXTRACTED_VERSION" >> $GITHUB_ENV
+        echo "OUTPUT_NAME=$OUTPUT_FILE_NAME" >> $GITHUB_ENV
+        
+        # 设置作业输出，供其他作业使用
+        echo "version_str=$EXTRACTED_VERSION" >> $GITHUB_OUTPUT
+        echo "output_name_str=$OUTPUT_FILE_NAME" >> $GITHUB_OUTPUT
+        
+        echo "Extracted Version: $EXTRACTED_VERSION"
+        echo "Set OUTPUT_NAME to: $OUTPUT_FILE_NAME"
+        echo "Set job output version_str to: $EXTRACTED_VERSION"
+        echo "Set job output output_name_str to: $OUTPUT_FILE_NAME"
 
     - name: Verify Environment Variables
       run: |
@@ -130,90 +140,86 @@ jobs:
     - name: Build macOS App
       run: |
         pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --add-data "app:app" run.py
-        # 确保输出文件可执行
         chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: macos-executable-${{ env.VERSION }} # 为构建产物添加版本号以避免冲突
-        path: dist/${{ env.OUTPUT_NAME }} # PyInstaller 创建的可执行文件的路径
+        name: macos-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
+        path: dist/${{ steps.get_version.outputs.output_name_str }} # 使用步骤输出的文件名
 
   create-release:
     needs: [build-windows, build-macos] # 在两个构建都成功后运行
     runs-on: ubuntu-latest
     permissions:
       contents: write # 需要创建标签和发布
-
     steps:
-      # 需要 checkout 才能再次运行 python 脚本或进行标记
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+      # 不需要再 Checkout 和 Extract version for Release
+      # 版本号将从 needs 上下文获取
 
-      # 在此处重新提取版本以确保其可用于发布命名/标记
-      - name: Extract version for Release
-        id: get_version_release
-        run: |
-          # 需要先安装 python 环境才能执行脚本
-          sudo apt-get update && sudo apt-get install -y python3 python3-pip
-          VERSION_STR=$(python run.py -v)
-          if [ -z "$VERSION_STR" ]; then
-            echo "::error::Failed to extract version from python run.py -v"
-            exit 1
-          fi
-          echo "VERSION=$VERSION_STR" >> $GITHUB_ENV
-          echo "WINDOWS_FILENAME=${{ env.APP_NAME }}-windows-v$VERSION_STR.exe" >> $GITHUB_ENV
-          echo "MACOS_FILENAME=${{ env.APP_NAME }}-macos-v$VERSION_STR" >> $GITHUB_ENV
-          echo "Release Version: $VERSION_STR"
+    - name: Define Release Variables
+      id: release_vars
+      run: |
+        # 从 build-macos 作业获取版本号 (假设两个构建作业的版本号是一致的)
+        # 如果两个构建作业的版本号可能不同（理论上不应该），你需要决定用哪个或如何处理差异
+        echo "RELEASE_VERSION=${{ needs.build-macos.outputs.version }}"
+        echo "Using version for release: ${{ needs.build-macos.outputs.version }}"
 
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-executable-${{ env.VERSION }} # 使用带版本号的名称下载
-          path: artifacts # 将所有构建产物下载到通用目录
+        # 从各自的构建作业输出中获取确切的文件名
+        WINDOWS_FILENAME="${{ needs.build-windows.outputs.output_name }}.exe"
+        MACOS_FILENAME="${{ needs.build-macos.outputs.output_name }}"
+        
+        echo "WINDOWS_FILENAME_ENV=$WINDOWS_FILENAME" >> $GITHUB_ENV
+        echo "MACOS_FILENAME_ENV=$MACOS_FILENAME" >> $GITHUB_ENV
+        
+        # 也设置为步骤输出，方便后续直接引用 (或者直接用 GITHUB_ENV)
+        echo "final_windows_filename=$WINDOWS_FILENAME" >> $GITHUB_OUTPUT
+        echo "final_macos_filename=$MACOS_FILENAME" >> $GITHUB_OUTPUT
 
-      - name: Download macOS Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-executable-${{ env.VERSION }} # 使用带版本号的名称下载
-          path: artifacts # 将所有构建产物下载到通用目录
 
-      # 在继续之前验证下载的文件是否存在
-      - name: Verify Downloaded Artifacts
-        run: |
-          echo "Checking for Windows artifact: artifacts/${{ env.WINDOWS_FILENAME }}"
-          ls -l artifacts/
-          if [ ! -f "artifacts/${{ env.WINDOWS_FILENAME }}" ]; then
-            echo "::error::Windows artifact not found after download!"
-            exit 1
-          fi
-          echo "Checking for macOS artifact: artifacts/${{ env.MACOS_FILENAME }}"
-          if [ ! -f "artifacts/${{ env.MACOS_FILENAME }}" ]; then
-            echo "::error::macOS artifact not found after download!"
-            exit 1
-          fi
+    - name: Download Windows Artifact
+      uses: actions/download-artifact@v4
+      with:
+        # 使用 build-windows 作业输出的版本号来匹配正确的构建产物名称
+        name: windows-executable-${{ needs.build-windows.outputs.version }}
+        path: artifacts # 将所有构建产物下载到通用目录
 
-      # --- 移除了 'Check if Release Exists' 步骤 ---
+    - name: Download macOS Artifact
+      uses: actions/download-artifact@v4
+      with:
+        # 使用 build-macos 作业输出的版本号来匹配正确的构建产物名称
+        name: macos-executable-${{ needs.build-macos.outputs.version }}
+        path: artifacts
 
-      - name: Create Release
-        # --- 移除了 if 条件 ---
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.VERSION }}
-          name: Release v${{ env.VERSION }}
-          body: |
-            Automated release for version ${{ env.VERSION }}.
+    - name: Verify Downloaded Artifacts
+      run: |
+        echo "Checking for Windows artifact: artifacts/${{ steps.release_vars.outputs.final_windows_filename }}"
+        ls -l artifacts/
+        if [ ! -f "artifacts/${{ steps.release_vars.outputs.final_windows_filename }}" ]; then
+          echo "::error::Windows artifact not found after download! Expected: artifacts/${{ steps.release_vars.outputs.final_windows_filename }}"
+          exit 1
+        fi
+        echo "Checking for macOS artifact: artifacts/${{ steps.release_vars.outputs.final_macos_filename }}"
+        if [ ! -f "artifacts/${{ steps.release_vars.outputs.final_macos_filename }}" ]; then
+          echo "::error::macOS artifact not found after download! Expected: artifacts/${{ steps.release_vars.outputs.final_macos_filename }}"
+          exit 1
+        fi
 
-            **Downloads:**
-            * Windows: `${{ env.WINDOWS_FILENAME }}`
-            * macOS: `${{ env.MACOS_FILENAME }}`
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/${{ env.WINDOWS_FILENAME }}
-            artifacts/${{ env.MACOS_FILENAME }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.build-macos.outputs.version }} # 使用来自 build-macos 的版本
+        name: Release v${{ needs.build-macos.outputs.version }}
+        body: |
+          Automated release for version ${{ needs.build-macos.outputs.version }}.
+
+          **Downloads:**
+          * Windows: `${{ steps.release_vars.outputs.final_windows_filename }}`
+          * macOS: `${{ steps.release_vars.outputs.final_macos_filename }}`
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/${{ steps.release_vars.outputs.final_windows_filename }}
+          artifacts/${{ steps.release_vars.outputs.final_macos_filename }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
