@@ -93,77 +93,97 @@ class ConfigBuilder:
     def _login(self):
         """登录流程"""
         while True:
-            _ = ListPrompt(
-                "请选择登录方式:",
-                choices=[
+            try:
+                login_options = [
                     Choice("S 扫码登录", data="qrcode"),
                     Choice("I 键入Cookie", data="input"),
                     Choice("C 从现有配置文件中读取", data="config"),
                     Choice("- 取消", data="cancel"),
                 ]
-            ).prompt()
-            
-            if _.data == "qrcode": 
-                self.cookie = self.api.qr_login()
-            elif _.data == "input":
-                logger.opt(colors=True).info("请使用浏览器登录B站后, 打开 <green>https://account.bilibili.com/account/home</green>, 在浏览器的开发者工具中找到 Network 选项卡, 选择 home 请求, 在请求头中找到 Cookie 字段, 复制 Cookie 的值, ，粘贴到下面的输入框中.")
-                self.cookie = InputPrompt("请输入 Cookie:").prompt()
-            elif _.data == "config":
-                config_files = list(Path("config").glob("*.yml"))
-                if not config_files:
-                    logger.error("config文件夹中没有配置文件, 请先创建配置文件")
-                    continue
                 
-                # 按修改时间排序
-                config_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                
-                choices = []
-                for config_file in config_files:
-                    try:
-                        with open(config_file, "r", encoding="utf-8") as f:
-                            config = yaml.safe_load(f)
-                            project_id = config.get('project_id', '未知')
-                            
-                        mtime = config_file.stat().st_mtime
-                        time_str = time.strftime('%m-%d %H:%M', time.localtime(mtime))
-                        choice_text = f"{config_file.stem} ({time_str})"
-                        choices.append(Choice(choice_text, data=config_file))
-                    except Exception as e:
-                        choice_text = f"❌ {config_file.stem} (配置文件损坏)"
-                        choices.append(Choice(choice_text, data=config_file))
-                
-                file = ListPrompt(
-                    "请选择配置文件作为模板:",
-                    choices=choices + [Choice("← 返回", data="back")]
+                _ = ListPrompt(
+                    "请选择登录方式:",
+                    choices=login_options
                 ).prompt()
                 
-                if file.data == "back":
-                    continue
-                
-                with open(file.data, "r", encoding="utf-8") as f:
-                    try:
-                        config_data = yaml.safe_load(f)
-                        self.cookie = config_data['cookie']
-                        # 保存配置数据用于后续填充
-                        self.template_config = config_data
-                        logger.opt(colors=True).info(f'<cyan>将使用配置文件 {file.data.name} 作为模板</cyan>')
-                    except Exception as e:  
-                        logger.error("读取配置文件失败, 请检查配置文件格式")
+                if _.data == "qrcode": 
+                    logger.opt(colors=True).info('<cyan>正在生成二维码...</cyan>')
+                    self.cookie = self.api.qr_login()
+                    # 扫码登录后，确保UI状态稳定
+                    if self.cookie:
+                        logger.opt(colors=True).info('<green>扫码登录成功!</green>')
+                    else:
+                        logger.error("扫码登录失败, 请重新登录")
                         continue
-            elif _.data == "cancel":
-                return False
+                elif _.data == "input":
+                    logger.opt(colors=True).info("请使用浏览器登录B站后, 打开 <green>https://account.bilibili.com/account/home</green>, 在浏览器的开发者工具中找到 Network 选项卡, 选择 home 请求, 在请求头中找到 Cookie 字段, 复制 Cookie 的值, ，粘贴到下面的输入框中.")
+                    self.cookie = InputPrompt("请输入 Cookie:").prompt()
+                elif _.data == "config":
+                    config_files = list(Path("config").glob("*.yml"))
+                    if not config_files:
+                        logger.error("config文件夹中没有配置文件, 请先创建配置文件")
+                        continue
+                    
+                    # 按修改时间排序
+                    config_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                    
+                    choices = []
+                    for config_file in config_files:
+                        try:
+                            with open(config_file, "r", encoding="utf-8") as f:
+                                config = yaml.safe_load(f)
+                                project_id = config.get('project_id', '未知')
+                                
+                            mtime = config_file.stat().st_mtime
+                            time_str = time.strftime('%m-%d %H:%M', time.localtime(mtime))
+                            choice_text = f"{config_file.stem} ({time_str})"
+                            choices.append(Choice(choice_text, data=config_file))
+                        except Exception as e:
+                            choice_text = f"❌ {config_file.stem} (配置文件损坏)"
+                            choices.append(Choice(choice_text, data=config_file))
+                    
+                    file = ListPrompt(
+                        "请选择配置文件作为模板:",
+                        choices=choices + [Choice("← 返回", data="back")]
+                    ).prompt()
+                    
+                    if file.data == "back":
+                        continue
+                    
+                    with open(file.data, "r", encoding="utf-8") as f:
+                        try:
+                            config_data = yaml.safe_load(f)
+                            self.cookie = config_data['cookie']
+                            # 保存配置数据用于后续填充
+                            self.template_config = config_data
+                            logger.opt(colors=True).info(f'<cyan>将使用配置文件 {file.data.name} 作为模板</cyan>')
+                        except Exception as e:  
+                            logger.error("读取配置文件失败, 请检查配置文件格式")
+                            continue
+                elif _.data == "cancel":
+                    return False
 
-            if not self.cookie:
-                logger.error("未找到Cookie")
-                continue
-                
-            try:
-                self.api.set_cookie(self.cookie)
-                my_info_json = self.api.my_info()
-                logger.opt(colors=True).info(f'登录用户: <green>{my_info_json["data"]["profile"]["name"]}</green>')
-                return True
+                if not self.cookie:
+                    logger.error("未找到Cookie")
+                    continue
+                    
+                try:
+                    self.api.set_cookie(self.cookie)
+                    my_info_json = self.api.my_info()
+                    logger.opt(colors=True).info(f'登录用户: <green>{my_info_json["data"]["profile"]["name"]}</green>')
+                    # 等待一下确保界面稳定
+                    return True
+                except Exception as e:
+                    logger.error(f"获取用户信息失败, 请检查Cookie是否正确: {e}")
+            except KeyboardInterrupt:
+                logger.error("登录已取消")
+                return False
             except Exception as e:
-                logger.error("获取用户信息失败, 请检查Cookie是否正确")
+                logger.error(f"登录过程出现错误: {e}")
+                logger.debug(traceback.format_exc())
+                # 捕获所有异常，防止界面错乱
+                # 给UI一些时间恢复
+                continue
 
     def _get_project_info(self, default_project_id=None):
         """获取项目信息"""
@@ -601,7 +621,8 @@ class Main:
             except KeyboardInterrupt:
                 continue
             except Exception as e:
-                logger.error(f'发生错误: \n{traceback.format_exc()}')
+                logger.error(f'发生错误: {e}')
+                logger.debug(f'发生错误: \n{traceback.format_exc()}')
 
     def build_config(self, existing_config_path=None):
         """构建新的配置文件或编辑现有配置文件"""
@@ -677,7 +698,7 @@ class Main:
                 
             except Exception as e:  
                 logger.error("读取配置文件失败, 请检查配置文件格式")
-                logger.error(traceback.format_exc())
+                logger.debug(traceback.format_exc())
                 return
                 
             try:
@@ -694,5 +715,5 @@ class Main:
                 return
             except Exception as e:
                 import traceback
-                print(traceback.format_exc())
+                logger.debug(traceback.format_exc())
                 raise e 

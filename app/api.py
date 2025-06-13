@@ -209,7 +209,7 @@ class Api:
             
             
     @staticmethod
-    def qr_login() -> str:
+    def qr_login() -> Optional[str]:
         
         def cookie(cookies) -> str:
             lst = []
@@ -217,47 +217,67 @@ class Api:
                 lst.append(f"{item[0]}={item[1]}")
             cookie_str = ";".join(lst)
             return cookie_str
+                
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            }
+            session = requests.session()
+            session.get("https://www.bilibili.com/", headers=headers)
+            generate = session.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate", headers=headers).json()
+
+            if generate["code"] != 0:
+                logger.error("获取二维码失败，请检查网络连接")
+                return None
+
+            url = generate["data"]["url"]
+            qrcode_key = generate["data"]["qrcode_key"]
+
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            logger.opt(colors=True).info("<green>二维码已弹出 请使用哔哩哔哩 App 扫描二维码登录</green>")
+            img.show()
+
+            while True:
+                time.sleep(1)
+                try:
+                    poll_url = f"https://passport.bilibili.com/x/passport-login/web/qrcode/poll?source=main-fe-header&qrcode_key={qrcode_key}"
+                    req = session.get(poll_url, headers=headers)
+                    check = req.json()["data"]
+                except Exception as e:
+                    logger.error(f"轮询登录状态失败: {e}")
+                    return None
+                
+                if check["code"] == 0:
+                    # 登录成功
+                    logger.opt(colors=True).info("<green>登录成功!</green>")
+                    cookies = requests.utils.dict_from_cookiejar(session.cookies)
+                    return cookie(cookies)
+                    
+                elif check["code"] == 86101:
+                    pass
+                elif check["code"] == 86090:
+                    pass
+                elif check["code"] in [86083, 86038]:
+                    logger.error(f"二维码登录失败: {check.get('message', '未知错误')}")
+                    return None
+                else:
+                    logger.error(f"未知登录状态: {check}")
+                    return None
+
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-        }
-        session = requests.session()
-        session.get("https://www.bilibili.com/", headers=headers)
-        generate = session.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate",headers=headers,).json()
-
-        if generate["code"] != 0:
-            logger.error("获取二维码失败，请检查网络连接")
+        except Exception as e:
+            logger.debug(f"扫码登录过程中出现错误: {e}")
+            logger.debug(traceback.format_exc())
             return None
-
-        url = generate["data"]["url"]
-        qrcode_key = generate["data"]["qrcode_key"]
-
-        qr = qrcode.QRCode()
-        qr.add_data(url)
-        qr.print_ascii(invert=True)
-        img = qr.make_image()
-        img.show()
-        logger.info("请使用哔哩哔哩 App 扫描二维码登录")
-
-        while True:
-            time.sleep(1)
-            poll_url = f"https://passport.bilibili.com/x/passport-login/web/qrcode/poll?source=main-fe-header&qrcode_key={qrcode_key}"
-            req = session.get(poll_url, headers=headers)
-            check = req.json()["data"]
-            if check["code"] == 0:
-                logger.success("登录成功")
-                cookies = requests.utils.dict_from_cookiejar(session.cookies)
-                return cookie(cookies)
-            elif check["code"] == 86101:
-                pass  # 等待扫描
-            elif check["code"] == 86090:
-                logger.info("等待确认")
-            elif check["code"] in [86083, 86038]:
-                logger.error(check["message"])
-                return None # 重新登录
-            else:
-                logger.error(check)
-                return None # 重新登录
+            
             
             
             

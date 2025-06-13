@@ -106,21 +106,27 @@ class Logic():
                             logger.info(f"监控库存中, 等待 {self.in_stock_interval} 秒")
                             time.sleep(self.in_stock_interval)
                             continue
+                    elif res["errno"] == 900001:
+                        logger.info(f"前方拥堵, 请重试.")
+                        continue
                     elif res["errno"] == 100003:
                         logger.warning(f"该项目每人限购1张, 购票人已存在订单.")
                         break
+                    elif res["errno"] == 100016:
+                        logger.warning(f"该项目不可售, 请检查项目是否存在.")
+                        continue
+                    elif res["errno"] == 100017:
+                        logger.warning(f"票种不可售, 请检查票种是否存在.")
+                        continue
                     elif res["errno"] == 100079:
                         logger.warning(f"本项目已经下单, 有尚未完成订单, 请完成订单后再试.")
                         break
                     elif res["errno"] == 100039:
                         logger.warning(f"活动收摊啦, 下次要快点哦")
-                        return
-                    elif res["errno"] == 900001:
-                        logger.info(f"前方拥堵, 请重试.")
-                        continue
+                        break
                     # 其他错误
-                    # elif res["errno"] in ERRNO_DICT:
-                    #     logger.info(f"{ERRNO_DICT[res['errno']]}")
+                    elif res["errno"] in ERRNO_DICT:
+                        logger.info(f"{ERRNO_DICT[res['errno']]}")
                     else:
                         logger.info(f"未处理的返回: {res}")
                         
@@ -128,7 +134,7 @@ class Logic():
                     break
                 except Exception as e:
                     logger.error(f"发生错误: {e}")
-                    print(traceback.format_exc())
+                    logger.debug(traceback.format_exc())
                     time.sleep(1)
                     
         except CancelledError:
@@ -137,6 +143,6 @@ class Logic():
             return
         except Exception as e:
             logger.error(f"发生错误: {e}")
-            print(traceback.format_exc())
+            logger.debug(traceback.format_exc())
             
     
