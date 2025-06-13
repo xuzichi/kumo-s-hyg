@@ -43,6 +43,7 @@ ERRNO_DICT = {
     100034: "票价错误",
     100050: "当前页面已失效，请返回详情页重新下单", # confirm
     209001: "本项目需要联系人信息，请填写姓名及手机号", # create
+    900001: "前方拥堵，请重试.", # 前方拥堵，请重试.
 }
 
 
@@ -111,10 +112,17 @@ class Logic():
                     elif res["errno"] == 100079:
                         logger.warning(f"本项目已经下单, 有尚未完成订单, 请完成订单后再试.")
                         break
-                    elif res["errno"] in ERRNO_DICT:
-                        logger.info(f"{ERRNO_DICT[res['errno']]}")
+                    elif res["errno"] == 100039:
+                        logger.warning(f"活动收摊啦, 下次要快点哦")
+                        return
+                    elif res["errno"] == 900001:
+                        logger.info(f"前方拥堵, 请重试.")
+                        continue
+                    # 其他错误
+                    # elif res["errno"] in ERRNO_DICT:
+                    #     logger.info(f"{ERRNO_DICT[res['errno']]}")
                     else:
-                        logger.info(f"发生错误: {res}")
+                        logger.info(f"未处理的返回: {res}")
                         
                 except KeyboardInterrupt:
                     break

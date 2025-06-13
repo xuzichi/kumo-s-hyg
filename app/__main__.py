@@ -8,7 +8,7 @@ from app.screen import Main
 
 from .api import Api
 
-__versions__ = "0.1.0"
+__versions__ = "0.1.1"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -28,22 +28,9 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         print("可用参数:")
         print("  --version, -v    显示版本号")
         print("  --help, -h       显示帮助信息")
-        print("  --config <file>, -c <file>  指定配置文件, 直接启动.")
-        print("  --debug          启用调试模式")
+        # print("  --config <file>, -c <file>  指定配置文件, 直接启动.")
+        print("  --debug, -d       启用调试模式")
         exit(0)
-        
-    if '--config' in argv_list or '-c' in argv_list:
-        try:
-            index = argv_list.index('--config') if '--config' in argv_list else argv_list.index('-c')
-            config_file = argv_list[index + 1]
-            from app.screen import Main
-            Main().run_by_config(config_name=config_file)
-        except Exception as e:
-            if str(e) == "list index out of range":
-                logger.error("请指定配置文件")
-            else:
-                logger.error(f"配置文件错误: {e}")
-            exit(1)
         
     try:
         Main().run()

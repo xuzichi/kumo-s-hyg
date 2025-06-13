@@ -27,6 +27,9 @@ from .api import Api
 from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 
 
+
+
+
 class Order:
     ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -45,7 +48,6 @@ class Order:
         self.tel = None  # 购票人电话 （非实名制时使用）
         self.deliver_info: Optional[Dict[str, str]] = None  # 收货人信息
         self.timestamp = int(round(time.time() * 1000))
-
         
     def build(self, *, config: dict) -> None:
         '''
@@ -70,15 +72,21 @@ class Order:
         '''
         
         project_json = self.api.project(project_id=self.project_id)
-        project_str = json.dumps(project_json, ensure_ascii=False)
         screen_idx, ticket_idx = config['screen_ticket'][0]
 
+        # 判断实名制类型
+        buyer_info = project_json['data'].get('buyer_info', '')
+        id_bind = project_json['data'].get('id_bind', 0)
+        is_realname = bool(buyer_info) or id_bind in [1, 2]
+        is_multi_buyer = ('2' in buyer_info or id_bind == 2) and not (buyer_info.startswith('1'))
+        is_single_buyer = ('1' in buyer_info or id_bind == 1) and not (buyer_info.startswith('2'))
+
         if 'buyer_index' in config and config['buyer_index']:
-            if '一单一证' in project_str:
-                logger.debug(f"实名制, 选择单个购票人: {config['buyer_index']}")
+            if is_multi_buyer:
+                logger.debug(f"实名制, 选择多个购票人: {config['buyer_index']}")
                 buyer_index_list = config['buyer_index']
-            elif '一人一证' in project_str:
-                logger.debug(f"实名制, 选择单个/多个购票人: {config['buyer_index']}")
+            elif is_single_buyer:
+                logger.debug(f"实名制, 选择单个购票人: {config['buyer_index']}")
                 buyer_index_list = [config['buyer_index'][0]]
             buyer_json = self.api.buyer()
             
@@ -130,6 +138,7 @@ class Order:
         # 构建时间
         self.sale_start = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleStart']
         self.sale_end = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleEnd']
+            
 
     def prepare(self) -> Optional[prepareJson]:
         prepare_json = self.api.prepare(
