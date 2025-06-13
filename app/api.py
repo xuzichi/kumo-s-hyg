@@ -233,6 +233,7 @@ class Api:
             url = generate["data"]["url"]
             qrcode_key = generate["data"]["qrcode_key"]
 
+            # 生成二维码并保存到文件
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -242,8 +243,12 @@ class Api:
             qr.add_data(url)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
-            logger.opt(colors=True).info("<green>二维码已弹出 请使用哔哩哔哩 App 扫描二维码登录</green>")
-            img.show()
+            
+            # 保存二维码到文件
+            qr_file = Path("./login_qrcode.png")
+            img.save(qr_file)
+            logger.opt(colors=True).info(f"<green>二维码已保存为 {qr_file.name}，请手动打开此文件扫描登录</green>")
+            logger.opt(colors=True).info("<yellow>请使用哔哩哔哩 App 扫描二维码登录</yellow>")
 
             while True:
                 time.sleep(1)
@@ -277,6 +282,16 @@ class Api:
             logger.debug(f"扫码登录过程中出现错误: {e}")
             logger.debug(traceback.format_exc())
             return None
+            
+        finally:
+            # 清理二维码文件
+            try:
+                qr_file = Path("./login_qrcode.png")
+                if qr_file.exists():
+                    qr_file.unlink()
+                    logger.debug("登录二维码文件已清理")
+            except Exception as e:
+                logger.debug(f"清理二维码文件失败: {e}")
             
             
             
