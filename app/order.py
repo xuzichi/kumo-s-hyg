@@ -49,6 +49,9 @@ class Order:
         self.deliver_info: Optional[Dict[str, str]] = None  # 收货人信息
         self.timestamp = int(round(time.time() * 1000))
         
+        # 项目类型缓存
+        self._is_hot_project: Optional[bool] = None
+        
     def build(self, *, config: dict) -> None:
         '''
         ### param:
@@ -133,10 +136,39 @@ class Order:
         # 构建时间
         self.sale_start = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleStart']
         self.sale_end = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx]['saleEnd']
+        
+        # 检查并缓存项目类型
+        self._is_hot_project = project_json.get("data", {}).get("hotProject", False)
+        # self._is_hot_project = True # 测试用
+        if self._is_hot_project:
+            logger.opt(colors=True).info("<red>检测到热门项目，将使用HOT模式</red>")
+        else:
+                          logger.opt(colors=True).info("<green>非 Hot 项目，使用标准模式</green>")
             
 
     def prepare(self) -> Optional[prepareJson]:
+        if self._is_hot_project:
+            return self._hot_prepare()
+        else:
+            return self._normal_prepare()
+            
+    def _normal_prepare(self) -> Optional[prepareJson]:
         prepare_json = self.api.prepare(
+            project_id=self.project_id,
+            count=self.count,
+            screen_id=self.screen_id,
+            sku_id=self.sku_id
+        )
+        try:
+            if prepare_json["errno"] == 0:
+                self.token = prepare_json["data"]["token"]
+                return prepare_json
+            return 
+        except Exception as e:
+            return
+    
+    def _hot_prepare(self) -> Optional[prepareJson]:
+        prepare_json = self.api.hot_prepare(
             project_id=self.project_id,
             count=self.count,
             screen_id=self.screen_id,
@@ -166,7 +198,28 @@ class Order:
             return 
     
     def create(self) -> createJson:
+        if self._is_hot_project:
+            return self._hot_create()
+        else:
+            return self._normal_create()
+    
+    def _normal_create(self) -> createJson:
         create_json = self.api.create(
+            project_id=self.project_id,
+            token=self.token,
+            screen_id=self.screen_id,
+            sku_id=self.sku_id,
+            count=self.count,
+            pay_money=self.pay_money,
+            buyer_info=self.buyer_info,
+            deliver_info=self.deliver_info,
+            buyer=self.buyer,
+            tel=self.tel
+        )
+        return create_json
+    
+    def _hot_create(self) -> createJson:
+        create_json = self.api.hot_create(
             project_id=self.project_id,
             token=self.token,
             screen_id=self.screen_id,

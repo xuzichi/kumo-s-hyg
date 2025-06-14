@@ -8,7 +8,7 @@ from app.screen import Main
 
 from .api import Api
 
-__versions__ = "0.1.3"
+__versions__ = "0.1.4"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -33,6 +33,7 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         exit(0)
         
     try:
+        logger.opt(colors=True).info(f'We1c0me <green>khyg</green> v{__versions__}')
         Main().run()
     except CancelledError:
         logger.info("program exit.")

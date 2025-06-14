@@ -29,23 +29,35 @@ from .api import Api
 from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 
 
-ERRNO_DICT = {
-    0: "成功",
-    3: "身份证盾中",
-    100009: "库存不足, 暂无余票",
-    100001: "无票",
-    100041: "对未发售的票进行抢票",
+# 错误码处理增强
+ERROR_HANDLERS = {
+    0: "请求成功",
+    3: "身份证盾中，请稍后重试",
+    412: "请求被拦截，触发风控",
+    429: "请求过于频繁，请稍后重试",
+    -401: "触发风控验证",
+    -412: "请求参数错误",
+    -509: "请求过于频繁",
+    -616: "提交评论失败",
+    -799: "请求过于频繁",
+    100001: "无票或网络拥堵",
     100003: "该项目每人限购1张",
+    100009: "库存不足，暂无余票",
     100016: "项目不可售",
-    100039: "活动收摊啦, 下次要快点哦", # prepare
-    100048: "已经下单, 有尚未完成订单",
     100017: "票种不可售",
-    100051: "订单准备过期，重新验证", # token 过期
-    100034: "票价错误",
-    100050: "当前页面已失效，请返回详情页重新下单", # confirm
-    209001: "本项目需要联系人信息，请填写姓名及手机号", # create
-    900001: "前方拥堵，请重试.", # 前方拥堵，请重试.
+    100034: "票价错误，自动更新",
+    100039: "活动收摊啦，下次要快点哦",
+    100041: "对未发售的票进行抢票",
+    100048: "已经下单，有尚未完成订单",
+    100050: "当前页面已失效，请返回详情页重新下单",
+    100051: "订单准备过期，重新验证",
+    100079: "本项目已经下单，有尚未完成订单",
+    209001: "本项目需要联系人信息，请填写姓名及手机号",
+    219: "库存不足",
+    221: "系统繁忙，请稍后重试",
+    900001: "前方拥堵，请重试",
 }
+
 
 
 class Logic():
@@ -118,12 +130,13 @@ class Logic():
             
     def run(self):
         try:                        
-            # build 参数
+            # build 参数（会自动检测项目类型）
             self.order.build(config=self.config)
             
             if self.wait_invoice: # 等待开票
                 self.wait_for_sale_start()
             
+            # 智能prepare（自动选择hot或normal）
             self.order.prepare()
             self.order.confirm()
             
@@ -139,8 +152,11 @@ class Logic():
                     order_attempt += 1
                     logger.opt(colors=True).debug(f"<cyan>正在尝试下单, 内部计数器: {order_attempt} </cyan>")
                     
-                    res = self.order.create() # 下单        
-                    if res["errno"] == 0:
+                    # 智能create（自动选择hot或normal）
+                    res = self.order.create()        
+                    error_code = res.get("errno", -1)
+                    
+                    if error_code == 0:
                         logger.warning(f"下单成功, 正在判断是否为假票...")
                         pay_token = res["data"]["token"]
                         order_id = res["data"]["orderId"] if "orderId" in res["data"] else None
@@ -151,46 +167,44 @@ class Logic():
                         else:
                             logger.error(f"假票, 请重新下单.")
                             continue
-                    elif res["errno"] == 3:
-                        logger.info(f"请慢一点...")
-                        time.sleep(4.96)
-                        order_attempt = 0  # 重置计数器，因为已经等待了4.96秒
+                    
+                    # 使用增强的错误处理
+                    if error_code in ERROR_HANDLERS:
+                        error_msg = ERROR_HANDLERS[error_code]
+                    else:
+                        error_msg = f"未知错误码: {error_code}"
+                    
+                    if error_code == 412:
+                        logger.error(f"{error_msg} - 可能触发了风控机制")
+                        logger.info(f"等待 30 秒后重试...")
+                        time.sleep(30)
+                        order_attempt = 0  # 重置计数器
                         continue
-                    elif res["errno"] == 100001:
-                        logger.info(f"前方拥堵.")
-                        continue
-                    elif res["errno"] == 100051:
-                        logger.warning(f"订单准备过期, 请重新验证.")
+                    elif error_code == 100051:
+                        logger.warning(f"{error_msg}")
+                        # 智能重新prepare（自动选择hot或normal）
                         self.order.prepare()
                         self.order.confirm()
-                        order_attempt = 0  # 重置计数器，重新准备后第一次不等待
+                        order_attempt = 0 
                         continue
-                    elif res["errno"] == 100009:
-                        logger.info(f"库存不足, 暂无余票")
+                    elif error_code in [100003, 100079, 100016, 100039]:
+                        logger.warning(f"{error_msg}")
+                        break  # 项目相关错误，直接退出
+                    
+                    elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -401, -509, -799]:
+                        if error_code == 3: # 身份证盾中，等待4.96秒后重试
+                            logger.info(error_msg)
+                            time.sleep(4.96)
+                            order_attempt = 0  # 重置计数器
+                        else:
+                            logger.info(f" {error_msg}")
+                            
                         continue
-                    elif res["errno"] == 900001:
-                        logger.info(f"前方拥堵, 请重试.")
-                        continue
-                    elif res["errno"] == 100003:
-                        logger.warning(f"该项目每人限购1张, 购票人已存在订单.")
-                        break
-                    elif res["errno"] == 100016:
-                        logger.warning(f"该项目不可售, 请检查项目是否存在.")
-                        continue
-                    elif res["errno"] == 100017:
-                        logger.warning(f"票种不可售, 请检查票种是否存在.")
-                        continue
-                    elif res["errno"] == 100079:
-                        logger.warning(f"本项目已经下单, 有尚未完成订单, 请完成订单后再试.")
-                        break
-                    elif res["errno"] == 100039:
-                        logger.warning(f"活动收摊啦, 下次要快点哦")
-                        break
-                    # 其他错误
-                    elif res["errno"] in ERRNO_DICT:
-                        logger.info(f"{ERRNO_DICT[res['errno']]}")
                     else:
-                        logger.info(f"未处理的返回: {res}")
+                        # 未知错误或不可重试错误
+                        logger.error(error_msg)
+                        logger.debug(f"未捕获的完整响应: {res}")
+                        continue
                         
                 except KeyboardInterrupt:
                     break

@@ -139,7 +139,7 @@ class ConfigBuilder:
                             choice_text = f"{config_file.stem} ({time_str})"
                             choices.append(Choice(choice_text, data=config_file))
                         except Exception as e:
-                            choice_text = f"❌ {config_file.stem} (配置文件损坏)"
+                            choice_text = f"{config_file.stem} (配置文件损坏)"
                             choices.append(Choice(choice_text, data=config_file))
                     
                     file = ListPrompt(
@@ -259,7 +259,7 @@ class ConfigBuilder:
                 break
         
         if all_limits_zero:
-            logger.opt(colors=True).warning('<yellow>⚠️  检测到所有票种的限购数量都为0，可能是没有大会员或者没有购买权限导致的，将使用默认限购数量：99张</yellow>')
+            logger.opt(colors=True).warning('<yellow>检测到所有票种的限购数量都为0，可能是没有大会员或者没有购买权限导致的，将使用默认限购数量：99张</yellow>')
                 
         # 开始构建配置字符串
         config_str = f'''project_id: {project_id} # {project_json['data']['name']} {project_json['data']['sale_flag']}'''.strip()
@@ -304,7 +304,7 @@ class ConfigBuilder:
 
 setting: # 常规配置, 根据需求修改
   wait_invoice: {str(wait_invoice).lower()}  # 等待开票后再抢票.
-  interval: 0.88  # 全局尝试订单请求间隔, 0.88 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔.
+  interval: 0.9  # 全局尝试订单请求间隔, 0.9 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔, 具体最优间隔受实际情况影响.
 
 # ==========================
 cookie: {self.cookie}
@@ -502,7 +502,7 @@ class ConfigManager:
                 choice_text = f"{config_file.stem} ({time_str})"
                 choices.append(Choice(choice_text, data=config_file))
             except Exception as e:
-                choice_text = f"❌ {config_file.stem} (配置文件损坏)"
+                choice_text = f"{config_file.stem} (配置文件损坏)"
                 choices.append(Choice(choice_text, data=config_file))
 
         selected_file = ListPrompt(
@@ -539,7 +539,7 @@ class ConfigManager:
                 choice_text = f"{config_file.stem} ({time_str})"
                 choices.append(Choice(choice_text, data=config_file))
             except Exception as e:
-                choice_text = f"❌ {config_file.stem} (配置文件损坏)"
+                choice_text = f"{config_file.stem} (配置文件损坏)"
                 choices.append(Choice(choice_text, data=config_file))
 
         selected_file = ListPrompt(
@@ -570,7 +570,6 @@ class Main:
         self.cookie: str = None
         self.api = Api()
         self.template_config = None  # 用于存储模板配置
-        logger.opt(colors=True).info('We1c0me <green>khyg</green> v0.0.1')
         if not Path("config").exists():            
             Path("config").mkdir(parents=True, exist_ok=True)
             
@@ -592,7 +591,7 @@ class Main:
                         choices.append(Choice(config_file.stem, data=("run", config_file)))
                     except Exception as e:
                         # 如果读取配置文件失败，仍然显示文件名
-                        choice_text = f"❌ {config_file.stem} (配置文件损坏)"
+                        choice_text = f"{config_file.stem} (配置文件损坏)"
                         choices.append(Choice(choice_text, data=("run", config_file)))
             else:
                 choices.append(Choice("暂无配置文件，请先生成配置", data="no_config"))
@@ -705,6 +704,7 @@ class Main:
                 
             except Exception as e:  
                 logger.error("读取配置文件失败, 请检查配置文件格式")
+                import traceback
                 logger.debug(traceback.format_exc())
                 return
                 
