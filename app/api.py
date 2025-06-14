@@ -61,20 +61,15 @@ class ProjectInfoByDateJson:
 
 class Api:
     def __init__(self, cookie: Optional[str] = None) -> None:
+        # 使用移动端 User-Agent (基于你的抓包数据)
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:52.0) Gecko/20100101 Firefox/52.0",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/621.2.5.10.10 (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/iPhone 16 Pro Max mobi_app/iphone build/84800100 osVer/18.5 network/2 channel/AppStore Buvid/YC45E6C974DE0A5D43D28E060E5F0779661D c_locale/zh-Hans_CN s_locale/zh_CN sessionID/d11718ec disable_rcmd/0 timezone/Asia/Shanghai utcOffset/+08:00 isDaylightTime/0 alwaysTranslate/0 ipRegion/CN legalRegion/CN themeId/1 sh/62 mallVersion/8480000 mVersion/309 flutterNotch/1 magent=BILI_H5_IOS_18.5_8.48.0_84800100",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Content-Type": "application/json",
+            "Origin": "https://show.bilibili.com",
             "Referer": "https://show.bilibili.com/",
-            "Cache-Control": "max-age=0",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-User": "?1",
-            "Sec-Fetch-Dest": "document",
             "Cookie": cookie,
-            "Accept": "*/*",
-            "Accept-Language": "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3",
-            "Accept-Encoding": "",
-            "Connection": "keep-alive"
         }
         
     def set_cookie(self, cookie: str) -> None:
@@ -106,17 +101,37 @@ class Api:
             raise
 
     def project(self, project_id)-> "ProjectJson":
-        return Api._make_api_call('GET', f'https://show.bilibili.com/api/ticket/project/getV2?id={project_id}', self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', f'https://show.bilibili.com/api/ticket/project/getV2?id={project_id}', mobile_headers)
 
     def buyer(self,)->"BuyerJson":
-        return Api._make_api_call('GET', "https://show.bilibili.com/api/ticket/buyer/list?is_default", self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', "https://show.bilibili.com/api/ticket/buyer/list?is_default", mobile_headers)
 
     def address(self, )-> "AddressJson":
-        return Api._make_api_call('GET', "https://show.bilibili.com/api/ticket/addr/list", self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', "https://show.bilibili.com/api/ticket/addr/list", mobile_headers)
 
-    def confirm(self, project_id, token, voucher: str = "", request_source: str = "pc-new") -> "confirmJson":
+    def confirm(self, project_id, token, voucher: str = "", request_source: str = "h5") -> "confirmJson":
         url = f"https://show.bilibili.com/api/ticket/order/confirmInfo?token={token}&voucher={voucher}&project_id={project_id}&requestSource={request_source}"
-        return Api._make_api_call('GET', url, self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', url, mobile_headers)
 
     def prepare(self,  project_id, count, screen_id, sku_id) -> "prepareJson":
         url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
@@ -129,9 +144,16 @@ class Api:
             "token": "",
             "newRisk": True,
             "ignoreRequestLimit": True,
-            "requestSource": "neul-next",
+            "requestSource": "h5",  # 移动端使用 h5
         }
-        return Api._make_api_call('POST', url, self.headers, json=payload)
+        
+        # 添加移动端特有的请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        
+        return Api._make_api_call('POST', url, mobile_headers, json=payload)
 
     def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, deliver_info=None, buyer=None, tel=None) -> "createJson":
         logger.debug(f" project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money} buyer_info: {buyer_info} deliver_info: {deliver_info} buyer: {buyer} tel: {tel}")
@@ -148,7 +170,7 @@ class Api:
             "deviceId": "",
             "newRisk": True,
             "token": token,
-            "deviceId": "",
+            "requestSource": "h5",  # 移动端使用 h5
         }
         if deliver_info:
             payload["deliver_info"] = deliver_info
@@ -157,19 +179,35 @@ class Api:
             payload["buyer"] = buyer
             payload["tel"] = tel
 
+        # 添加移动端特有的请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+
         url = f"https://show.bilibili.com/api/ticket/order/createV2?project_id={project_id}"
-        return Api._make_api_call('POST', url, self.headers, json=payload)
+        return Api._make_api_call('POST', url, mobile_headers, json=payload)
 
     def gaia_vgate_register( self, prepare_json: "prepareJson") -> dict:
         url = f"https://api.bilibili.com/x/gaia-vgate/v1/register"
         payload = {
             'data': prepare_json["data"]["ga_data"]["riskParams"],
         }
-        return Api._make_api_call('POST', url, self.headers, json=payload)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('POST', url, mobile_headers, json=payload)
 
     def my_info(self,  ) -> "myInfoJson":
         url = 'https://api.bilibili.com/x/space/v2/myinfo?web_location=333.1387'
-        return Api._make_api_call('GET', url, self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', url, mobile_headers)
 
     def create_status(self, project_id: str, pay_token: str, order_id: Optional[str] = None,) -> "createStatusJson":
         url = (
@@ -182,20 +220,30 @@ class Api:
         )
         if order_id:
             url += "&orderId=" + str(order_id)
-        _headers = self.headers.copy()
-        _headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"
-        return Api._make_api_call('GET', url, _headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', url, mobile_headers)
     
     def project_info_by_date(self, project_id: str, date: str) -> "ProjectInfoByDateJson":
         url = f'https://show.bilibili.com/api/ticket/project/infoByDate?id={project_id}&date={date}'
-        return Api._make_api_call('GET', url, self.headers)
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
+        return Api._make_api_call('GET', url, mobile_headers)
 
 
     def logout(self):        
         url = "https://passport.bilibili.com/login/exit/v2"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-        }
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers.update({
+            "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+        })
         data={
             "biliCSRF": self.headers["Cookie"][
                 self.headers["Cookie"].index("bili_jct") + 9 : self.headers[
@@ -204,7 +252,7 @@ class Api:
                 + 41
             ]
         }
-        return Api._make_api_call('POST', url, headers, data=data)
+        return Api._make_api_call('POST', url, mobile_headers, json=data)
     
             
             
@@ -219,12 +267,17 @@ class Api:
             return cookie_str
                 
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            # 使用移动端请求头
+            mobile_headers = {
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/621.2.5.10.10 (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/iPhone 16 Pro Max mobi_app/iphone build/84800100 osVer/18.5 network/2 channel/AppStore Buvid/YC45E6C974DE0A5D43D28E060E5F0779661D c_locale/zh-Hans_CN s_locale/zh_CN sessionID/d11718ec disable_rcmd/0 timezone/Asia/Shanghai utcOffset/+08:00 isDaylightTime/0 alwaysTranslate/0 ipRegion/CN legalRegion/CN themeId/1 sh/62 mallVersion=8480000 mVersion=309 flutterNotch=1 magent=BILI_H5_IOS_18.5_8.48.0_84800100",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Referer": "https://www.bilibili.com/",
+                "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
             }
             session = requests.session()
-            session.get("https://www.bilibili.com/", headers=headers)
-            generate = session.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate", headers=headers).json()
+            session.get("https://www.bilibili.com/", headers=mobile_headers)
+            generate = session.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate", headers=mobile_headers).json()
 
             if generate["code"] != 0:
                 logger.error("获取二维码失败，请检查网络连接")
@@ -254,7 +307,7 @@ class Api:
                 time.sleep(1)
                 try:
                     poll_url = f"https://passport.bilibili.com/x/passport-login/web/qrcode/poll?source=main-fe-header&qrcode_key={qrcode_key}"
-                    req = session.get(poll_url, headers=headers)
+                    req = session.get(poll_url, headers=mobile_headers)
                     check = req.json()["data"]
                 except Exception as e:
                     logger.error(f"轮询登录状态失败: {e}")

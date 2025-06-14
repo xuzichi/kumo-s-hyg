@@ -78,16 +78,11 @@ class Order:
         buyer_info = project_json['data'].get('buyer_info', '')
         id_bind = project_json['data'].get('id_bind', 0)
         is_realname = bool(buyer_info) or id_bind in [1, 2]
-        is_multi_buyer = ('2' in buyer_info or id_bind == 2) and not (buyer_info.startswith('1'))
-        is_single_buyer = ('1' in buyer_info or id_bind == 1) and not (buyer_info.startswith('2'))
 
         if 'buyer_index' in config and config['buyer_index']:
-            if is_multi_buyer:
-                logger.debug(f"实名制, 选择多个购票人: {config['buyer_index']}")
-                buyer_index_list = config['buyer_index']
-            elif is_single_buyer:
-                logger.debug(f"实名制, 选择单个购票人: {config['buyer_index']}")
-                buyer_index_list = [config['buyer_index'][0]]
+            # 实名制项目，使用购票人信息
+            logger.debug(f"实名制, 选择购票人: {config['buyer_index']}")
+            buyer_index_list = config['buyer_index']
             buyer_json = self.api.buyer()
             
             buyer_info_list = []

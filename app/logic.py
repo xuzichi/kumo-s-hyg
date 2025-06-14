@@ -11,6 +11,7 @@ import requests
 from typing import Optional, List, Dict
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from noneprompt import (
     InputPrompt,
@@ -54,8 +55,66 @@ class Logic():
         
         self.wait_invoice = config["setting"]["wait_invoice"]
         self.interval =config["setting"]["interval"]
-        self.in_stock = config["setting"]["in_stock"]
-        self.in_stock_interval = config["setting"]["in_stock_interval"]
+    
+    def wait_for_sale_start(self):
+        """等待开票时间到达"""
+        current_time = int(time.time())
+        sale_start_time = self.order.sale_start
+        
+        if current_time >= sale_start_time:
+            logger.opt(colors=True).info("<green>已到开票时间，立即开始抢票!</green>")
+            return
+        
+        # 格式化开票时间
+        sale_start_dt = datetime.fromtimestamp(sale_start_time)
+        sale_start_str = sale_start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.opt(colors=True).info(f"<cyan>等待开票中...</cyan>")
+        logger.opt(colors=True).info(f"开票时间: <yellow>{sale_start_str}</yellow>")
+        
+        while True:
+            current_time = time.time()  # 使用float精度
+            remaining_seconds = sale_start_time - current_time
+            
+            # 提前0.3秒开始抢票
+            if remaining_seconds <= 0.3:
+                logger.opt(colors=True).info("<green>开始抢票！</green>")
+                break
+            
+            # 计算剩余时间
+            remaining_time = timedelta(seconds=remaining_seconds)
+            
+            # 格式化剩余时间
+            if remaining_seconds >= 3600:  # 超过1小时
+                time_str = str(remaining_time).split('.')[0]  # 去掉微秒
+            elif remaining_seconds >= 60:  # 超过1分钟
+                minutes = remaining_seconds // 60
+                seconds = remaining_seconds % 60
+                time_str = f"{minutes:02d}:{seconds:02d}"
+            else:  # 少于1分钟
+                time_str = f"{remaining_seconds}秒"
+            
+            current_dt = datetime.fromtimestamp(current_time)
+            current_str = current_dt.strftime("%H:%M:%S")
+            
+            if remaining_seconds <= 60:
+                logger.opt(colors=True).info(f"<red>⏰ {current_str} | 倒计时: {time_str}</red>")
+            elif remaining_seconds <= 300:
+                logger.opt(colors=True).info(f"<yellow>⏰ {current_str} | 剩余: {time_str}</yellow>")
+            else:
+                logger.opt(colors=True).info(f"<cyan>⏰ {current_str} | 剩余: {time_str}</cyan>")
+            
+            # 等待间隔：剩余时间越短，更新越频繁
+            if remaining_seconds <= 5:
+                time.sleep(0.1)  # 最后5秒，每0.1秒更新（更精确）
+            elif remaining_seconds <= 10:
+                time.sleep(0.5)  # 最后10秒，每0.5秒更新
+            elif remaining_seconds <= 60:
+                time.sleep(1)    # 最后1分钟，每秒更新
+            elif remaining_seconds <= 300:
+                time.sleep(5)    # 最后5分钟，每5秒更新
+            else:
+                time.sleep(10)   # 其他时间，每10秒更新
             
     def run(self):
         try:                        
@@ -63,19 +122,23 @@ class Logic():
             self.order.build(config=self.config)
             
             if self.wait_invoice: # 等待开票
-                logger.info(f"到达开票时间后开始抢票.")
-                while True:
-                    if int(time.time()) >= self.order.sale_start:
-                        break
-                    logger.info(f"."*randint(1, 10))
-                    time.sleep(0.7)
+                self.wait_for_sale_start()
             
             self.order.prepare()
             self.order.confirm()
-
+            
+            # 添加下单计数器，第一次不等待
+            order_attempt = 0
+            
             while True:
-                time.sleep(self.interval) 
                 try:    
+                    # 第一次下单立即执行，后续有间隔
+                    if order_attempt > 0:
+                        time.sleep(self.interval)
+                    
+                    order_attempt += 1
+                    logger.opt(colors=True).debug(f"<cyan>正在尝试下单, 内部计数器: {order_attempt} </cyan>")
+                    
                     res = self.order.create() # 下单        
                     if res["errno"] == 0:
                         logger.warning(f"下单成功, 正在判断是否为假票...")
@@ -91,6 +154,7 @@ class Logic():
                     elif res["errno"] == 3:
                         logger.info(f"请慢一点...")
                         time.sleep(4.96)
+                        order_attempt = 0  # 重置计数器，因为已经等待了4.96秒
                         continue
                     elif res["errno"] == 100001:
                         logger.info(f"前方拥堵.")
@@ -99,13 +163,11 @@ class Logic():
                         logger.warning(f"订单准备过期, 请重新验证.")
                         self.order.prepare()
                         self.order.confirm()
+                        order_attempt = 0  # 重置计数器，重新准备后第一次不等待
                         continue
                     elif res["errno"] == 100009:
                         logger.info(f"库存不足, 暂无余票")
-                        if self.in_stock:
-                            logger.info(f"监控库存中, 等待 {self.in_stock_interval} 秒")
-                            time.sleep(self.in_stock_interval)
-                            continue
+                        continue
                     elif res["errno"] == 900001:
                         logger.info(f"前方拥堵, 请重试.")
                         continue
@@ -136,6 +198,7 @@ class Logic():
                     logger.error(f"发生错误: {e}")
                     logger.debug(traceback.format_exc())
                     time.sleep(1)
+                    order_attempt = 0  # 重置计数器，因为已经等待了1秒
                     
         except CancelledError:
             return

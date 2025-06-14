@@ -201,7 +201,11 @@ class ConfigBuilder:
         
         project_json = self.api.project(project_id=project_id)
         logger.debug(project_json)
-        logger.opt(colors=True).info(f'项目信息: <green>{project_json["data"]["name"]}</green> {project_json["data"]["sale_flag"]}')
+        try:
+            logger.opt(colors=True).info(f'项目信息: <green>{project_json["data"]["name"]}</green> {project_json["data"]["sale_flag"]}')
+        except Exception as e:
+            logger.error(f"获取项目信息失败, 请检查项目ID是否正确")
+            return None
         
         # 检查项目状态
         if not project_json['data']['screen_list']:
@@ -242,6 +246,20 @@ class ConfigBuilder:
         ).prompt()
         
         selected_tickets = [selected_ticket_choice.data]
+        
+        # 检查是否所有票种的static_limit.num都为0（可能是大会员检测）
+        all_limits_zero = True
+        for screen in project_json['data']['screen_list']:
+            for ticket in screen['ticket_list']:
+                static_limit = ticket.get('static_limit', {})
+                if static_limit.get('num', 0) > 0:
+                    all_limits_zero = False
+                    break
+            if not all_limits_zero:
+                break
+        
+        if all_limits_zero:
+            logger.opt(colors=True).warning('<yellow>⚠️  检测到所有票种的限购数量都为0，可能是没有大会员或者没有购买权限导致的，将使用默认限购数量：99张</yellow>')
                 
         # 开始构建配置字符串
         config_str = f'''project_id: {project_id} # {project_json['data']['name']} {project_json['data']['sale_flag']}'''.strip()
@@ -266,19 +284,27 @@ class ConfigBuilder:
                     config_str += f'''\n  # - [{screen_idx}, {ticket_idx}] # {screen['name']} {ticket['desc']} {price_yuan}元'''
 
         # 处理实名制和地址选择
-        buyer_address_config = self._handle_buyer_and_address(project_json)
+        buyer_address_config = self._handle_buyer_and_address(project_json, selected_tickets[0])
         if buyer_address_config is None:  # 如果返回None表示用户未完成必要的选择
             return None
         config_str += buyer_address_config
+        
+        # 选择是否等待开票后再抢票
+        wait_invoice_choice = ListPrompt(
+            "是否等待开票后再抢票？",
+            choices=[
+                Choice("是 (等待开票后再抢票，推荐)", data=True),
+                Choice("否 (立即开始抢票)", data=False),
+            ]
+        ).prompt()
+        wait_invoice = wait_invoice_choice.data
         
         # 添加基础配置
         config_str += f'''
 
 setting: # 常规配置, 根据需求修改
-  wait_invoice: true  # 等待开票后再抢票.
-  interval: 0.33  # 全局尝试订单请求间隔, 太快可能会被 412 风控.
-  in_stock: false  # 回流模式, 无票时添加一个轮训间隔, 抢票模式下请设置为 false. 
-  in_stock_interval: 10  # 回流模式轮训间隔, 太快可能会被 412 风控.
+  wait_invoice: {str(wait_invoice).lower()}  # 等待开票后再抢票.
+  interval: 0.88  # 全局尝试订单请求间隔, 0.88 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔.
 
 # ==========================
 cookie: {self.cookie}
@@ -286,7 +312,7 @@ cookie: {self.cookie}
     '''
         return config_str
 
-    def _handle_buyer_and_address(self, project_json):
+    def _handle_buyer_and_address(self, project_json, selected_ticket_info):
         """处理购票人和地址选择"""
         config_str = ""
         
@@ -294,8 +320,15 @@ cookie: {self.cookie}
         buyer_info = project_json['data'].get('buyer_info', '')
         id_bind = project_json['data'].get('id_bind', 0)
         is_realname = bool(buyer_info) or id_bind in [1, 2]
-        is_multi_buyer = ('2' in buyer_info or id_bind == 2) and not (buyer_info.startswith('1'))
-        is_single_buyer = ('1' in buyer_info or id_bind == 1) and not (buyer_info.startswith('2'))
+        
+        # 获取选中票种的限购信息
+        screen_idx, ticket_idx = selected_ticket_info
+        static_limit = project_json['data']['screen_list'][screen_idx]['ticket_list'][ticket_idx].get('static_limit', {})
+        max_limit = static_limit.get('num', 1)
+        
+        # 如果static_limit.num为0，说明限购识别失败，使用默认值99
+        if max_limit == 0:
+            max_limit = 99  # 识别失败时的默认值
         
         address_outputed = False
         
@@ -332,54 +365,37 @@ cookie: {self.cookie}
                 choice_text = f"{buyer['name']} {buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
                 buyer_choices.append(Choice(choice_text, data=i))
             
-            if is_multi_buyer:
-                # 一单一证：可以选择多个购票人
-                logger.opt(colors=True).info('<cyan>此演出为实名制演出(一单一证), 可以选择多个购票人</cyan>')
-                
-                # 循环直到用户选择了至少一个购票人
-                while True:
-                    selected_buyer_choices = CheckboxPrompt(
-                        "请选择购票人信息(可多选):",
-                        choices=buyer_choices
-                    ).prompt()
-                    
-                    if not selected_buyer_choices:
-                        logger.error("请至少选择一个购票人")
-                    else:
-                        break
-                    
-                selected_buyers = [choice.data for choice in selected_buyer_choices]
-                config_str += f'\n'
-                config_str += f'\n# 此演出为实名制演出(一单一证), 可以选择多个购票人'
-                config_str += f'\nbuyer_index: # 选择购票人信息(可多选):'
-                
-                for i in range(len(buyer_json['data']["list"])):
-                    if i in selected_buyers:
-                        config_str += f'''\n  - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
-                    else:
-                        config_str += f'''\n  # - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
-                        
-            elif is_single_buyer:
-                # 一人一证：只能选择一个购票人
-                logger.opt(colors=True).info('<cyan>此演出为实名制演出(一人一证), 只能选择一个购票人</cyan>')
-                selected_buyer_choice = ListPrompt(
-                    "请选择购票人信息(单选):",
+            # 实名制演出：可以选择多个购票人，最多选择max_limit个
+            logger.opt(colors=True).info(f'<cyan>此演出为实名制演出, 限购{max_limit}张, 可以选择多个购票人(最多{max_limit}个)</cyan>')
+            
+            # 循环直到用户选择了至少一个购票人
+            while True:
+                selected_buyer_choices = CheckboxPrompt(
+                    f"请选择购票人信息(可多选, 最多{max_limit}个) - 按下空格或鼠标点击以多选:",
                     choices=buyer_choices
                 ).prompt()
-                selected_buyer = selected_buyer_choice.data
-                config_str += f'\n'
-                config_str += f'\n# 此演出为实名制演出(一人一证), 只能选择一个购票人'
-                config_str += f'\nbuyer_index: # 选择购票人信息(单选):'
                 
-                for i in range(len(buyer_json['data']["list"])):
-                    if i == selected_buyer:
-                        config_str += f'''\n  - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
-                    else:
-                        config_str += f'''\n  # - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
+                if not selected_buyer_choices:
+                    logger.error("请至少选择一个购票人")
+                elif len(selected_buyer_choices) > max_limit:
+                    logger.error(f"最多只能选择{max_limit}个购票人")
+                else:
+                    break
+                
+            selected_buyers = [choice.data for choice in selected_buyer_choices]
+            config_str += f'\n'
+            config_str += f'\n# 此演出为实名制演出, 限购{max_limit}张, 可以选择多个购票人(最多{max_limit}个)'
+            config_str += f'\nbuyer_index: # 选择购票人信息(可多选, 最多{max_limit}个):'
+            
+            for i in range(len(buyer_json['data']["list"])):
+                if i in selected_buyers:
+                    config_str += f'''\n  - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
+                else:
+                    config_str += f'''\n  # - {i} # {buyer_json['data']['list'][i]['name']} {buyer_json['data']['list'][i]['personal_id'][0:2]}*************{buyer_json['data']['list'][i]['personal_id'][-1:]}'''
 
         else:
             # 非实名制演出
-            logger.opt(colors=True).info('<cyan>此演出为非实名制演出, 将从您选择的地址信息中构建姓名/电话</cyan>')
+            logger.opt(colors=True).info(f'<cyan>此演出为非实名制演出, 限购{max_limit}张, 将从您选择的地址信息中构建姓名/电话</cyan>')
             
             if not address_outputed:
                 # 如果不是纸质票，需要选择记名信息
@@ -396,7 +412,7 @@ cookie: {self.cookie}
                 selected_address = selected_address_choice.data
                 
                 config_str += f'\n'
-                config_str += f'\n# 此演出为非实名制演出, 将从您选择的地址信息中构建姓名/电话'
+                config_str += f'\n# 此演出为非实名制演出, 限购{max_limit}张, 将从您选择的地址信息中构建姓名/电话'
                 config_str += f'\naddress_index: # 选择记名信息(单选):'
                 for i in range(len(address_json['data']["addr_list"])):
                     if i == selected_address:
@@ -405,23 +421,22 @@ cookie: {self.cookie}
                         config_str += f'''\n  # - {i} # {address_json['data']['addr_list'][i]['name']} {address_json['data']['addr_list'][i]['phone']}'''
                 address_outputed = True
 
-            # 选择购买数量
-            count_choices = [
-                Choice("1张", data=1),
-                Choice("2张", data=2),
-                Choice("3张", data=3),
-                Choice("4张", data=4),
-            ]
+            # 选择购买数量 - 根据限购数量动态生成选项
+            count_choices = []
+            for i in range(1, min(max_limit + 1, 9)):  # 最多显示8个选项
+                count_choices.append(Choice(f"{i}张", data=i))
+            
             selected_count_choice = ListPrompt(
-                "请选择购买数量:",
+                f"请选择购买数量(最多{max_limit}张):",
                 choices=count_choices
             ).prompt()
             selected_count = selected_count_choice.data
 
             config_str += f'\n'
-            config_str += f'\ncount: {selected_count} # 非实名制演出通过此参数设置购买数量'
+            config_str += f'\ncount: {selected_count} # 非实名制演出通过此参数设置购买数量(最多{max_limit}张)'
 
         return config_str
+
 
     def _save_config(self, config_str, project_json, existing_path=None):
         """保存配置文件"""
@@ -573,16 +588,8 @@ class Main:
                     # 读取配置文件获取项目信息
                     try:
                         with open(config_file, "r", encoding="utf-8") as f:
-                            config = yaml.safe_load(f)
-                            project_id = config.get('project_id', '未知')
-                            
-                        # 获取文件修改时间
-                        mtime = config_file.stat().st_mtime
-                        time_str = time.strftime('%m-%d %H:%M', time.localtime(mtime))
-                        
-                        # 构建选择项文本
-                        choice_text = f"{config_file.stem} ({time_str})"
-                        choices.append(Choice(choice_text, data=("run", config_file)))
+                            config = yaml.safe_load(f)                                                    
+                        choices.append(Choice(config_file.stem, data=("run", config_file)))
                     except Exception as e:
                         # 如果读取配置文件失败，仍然显示文件名
                         choice_text = f"❌ {config_file.stem} (配置文件损坏)"
@@ -614,7 +621,7 @@ class Main:
                     logger.opt(colors=True).info('请先生成配置文件')
                     continue
                 elif _.data == "exit":
-                    logger.opt(colors=True).info('程序退出，再见！')
+                    logger.opt(colors=True).info('exit, bye!')
                     break
             except CancelledError:
                 continue
