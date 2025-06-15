@@ -1,11 +1,19 @@
 .venv/
 .log/
+.models/*
 
 .DS_Store
 .github/
 _app_old/
 app/.DS_Store
 config/
+
+
+c.js
+
+i.js
+
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

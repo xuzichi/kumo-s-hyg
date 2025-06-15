@@ -136,7 +136,7 @@ class Logic():
             if self.wait_invoice: # 等待开票
                 self.wait_for_sale_start()
             
-            # 智能prepare（自动选择hot或normal）
+            # 执行prepare和confirm
             self.order.prepare()
             self.order.confirm()
             
@@ -152,7 +152,7 @@ class Logic():
                     order_attempt += 1
                     logger.opt(colors=True).debug(f"<cyan>正在尝试下单, 内部计数器: {order_attempt} </cyan>")
                     
-                    # 智能create（自动选择hot或normal）
+                    # 执行create下单
                     res = self.order.create()        
                     error_code = res.get("errno", -1)
                     
@@ -182,7 +182,7 @@ class Logic():
                         continue
                     elif error_code == 100051:
                         logger.warning(f"{error_msg}")
-                        # 智能重新prepare（自动选择hot或normal）
+                        # 重新prepare和confirm
                         self.order.prepare()
                         self.order.confirm()
                         order_attempt = 0 
@@ -197,7 +197,7 @@ class Logic():
                             time.sleep(4.96)
                             order_attempt = 0  # 重置计数器
                         else:
-                            logger.info(f" {error_msg}")
+                            logger.info(f"{error_msg}")
                             
                         continue
                     else:

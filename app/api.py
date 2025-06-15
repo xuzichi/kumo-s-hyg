@@ -16,29 +16,34 @@ import hashlib
 
 from .log import logger
 from .captcha import CaptchaHandler
+from .token_generator import create_token_generator
 import yaml
 
 
 class DeviceFingerprint:
     """轻量级设备指纹生成器"""
     def __init__(self):
-        # iPhone X以后的所有机型
         self.iphone_models = [
             'iPhone10,3', 'iPhone10,6',  # iPhone X
             'iPhone11,2', 'iPhone11,4', 'iPhone11,6', 'iPhone11,8',  # iPhone XS/XS Max/XR
-            'iPhone12,1', 'iPhone12,3', 'iPhone12,5',  # iPhone 11/11 Pro/11 Pro Max
+            'iPhone12,1', 'iPhone12,3', 'iPhone12,5', 'iPhone12,8',  # iPhone 11/11 Pro/11 Pro Max/SE 2nd
             'iPhone13,1', 'iPhone13,2', 'iPhone13,3', 'iPhone13,4',  # iPhone 12 mini/12/12 Pro/12 Pro Max
-            'iPhone14,2', 'iPhone14,3', 'iPhone14,4', 'iPhone14,5', 'iPhone14,7', 'iPhone14,8',  # iPhone 13/14系列
-            'iPhone15,2', 'iPhone15,3', 'iPhone15,4', 'iPhone15,5',  # iPhone 14 Pro/15系列
-            'iPhone16,1', 'iPhone16,2',  # iPhone 15 Pro/Pro Max
-            'iPhone17,1', 'iPhone17,2', 'iPhone17,3', 'iPhone17,4'   # iPhone 16系列
+            'iPhone14,2', 'iPhone14,3', 'iPhone14,4', 'iPhone14,5', 'iPhone14,6', 'iPhone14,7', 'iPhone14,8',  # iPhone 13系列/SE 3rd/iPhone 14系列
+            'iPhone15,2', 'iPhone15,3', 'iPhone15,4', 'iPhone15,5',  # iPhone 14 Pro/14 Pro Max/15/15 Plus
+            'iPhone16,1', 'iPhone16,2',  # iPhone 15 Pro/15 Pro Max
+            'iPhone17,1', 'iPhone17,2', 'iPhone17,3', 'iPhone17,4', 'iPhone17,5'   # iPhone 16系列/16e
         ]
         self.model = random.choice(self.iphone_models)
         
     def get_all_fingerprints(self):
         """生成所有设备指纹信息"""
+        # 简单的iOS版本随机
         version = f"18.{random.randint(0,5)}.{random.randint(0,3)}"
-        ua = f"Mozilla/5.0 (iPhone; CPU iPhone OS {version.replace('.', '_')} like Mac OS X) AppleWebKit/{random.randint(605,620)}.1.{random.randint(10,50)} (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/{self.model} mobi_app/iphone build/84800100 osVer/{version} network/wifi channel/AppStore"
+        
+        # 简单的WebKit版本随机
+        webkit_version = f"{random.randint(605,620)}.1.{random.randint(10,50)}"
+        
+        ua = f"Mozilla/5.0 (iPhone; CPU iPhone OS {version.replace('.', '_')} like Mac OS X) AppleWebKit/{webkit_version} (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/{self.model} mobi_app/iphone build/84800100 osVer/{version} network/wifi channel/AppStore"
         
         return {
             'user_agent': ua,
@@ -101,6 +106,15 @@ class Api:
         self.fingerprint = DeviceFingerprint()
         self.captcha_handler = CaptchaHandler(self)
         
+        # 初始化token生成器，从cookie中提取buvid3
+        buvid3 = None
+        if cookie:
+            import re
+            match = re.search(r'buvid3=([^;]+)', cookie)
+            if match:
+                buvid3 = match.group(1)
+        self.token_generator = create_token_generator(buvid3)
+        
         # 获取动态生成的指纹信息
         fingerprints = self.fingerprint.get_all_fingerprints()
         
@@ -124,8 +138,19 @@ class Api:
     
 
         
+
+    
     def set_cookie(self, cookie: str) -> None:
         self.headers["Cookie"] = cookie
+        # 更新token生成器的buvid3
+        buvid3 = None
+        if cookie:
+            import re
+            match = re.search(r'buvid3=([^;]+)', cookie)
+            if match:
+                buvid3 = match.group(1)
+        if buvid3:
+            self.token_generator = create_token_generator(buvid3)
         
     def _make_api_call(self, method: str, url: str, headers: dict, json_data=None, params=None, timeout: int = 120) -> Optional[dict]:
         """增强的API调用方法，支持错误处理和风控检测"""
@@ -202,35 +227,53 @@ class Api:
         return self._make_api_call('GET', "https://show.bilibili.com/api/ticket/addr/list", mobile_headers)
 
     def confirm(self, project_id, token, voucher: str = "", request_source: str = "h5") -> "confirmJson":
-        url = f"https://show.bilibili.com/api/ticket/order/confirmInfo?token={token}&voucher={voucher}&project_id={project_id}&requestSource={request_source}"
-        # 使用移动端请求头
+        # 使用正确的token生成器生成ptoken
+        ptoken = self.token_generator.generate_ptoken()
+            
+        url = f"https://show.bilibili.com/api/ticket/order/confirmInfo?token={token}&voucher={voucher}&projectId={project_id}&ptoken={ptoken}&project_id={project_id}&requestSource={request_source}"
         mobile_headers = self.headers.copy()
+        logger.debug(f"Confirm请求，携带正确ptoken: {ptoken}")
         return self._make_api_call('GET', url, mobile_headers)
 
     def prepare(self,  project_id, count, screen_id, sku_id) -> "prepareJson":
+        """
+        prepare请求，携带正确的ctoken
+        """
         url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
+        
+        # 使用正确的token生成器生成ctoken
+        prepare_token = self.token_generator.generate_ctoken()
+        
         payload = {
             "project_id": project_id,
             "count": count,
             "order_type": 1,
             "screen_id": screen_id,
             "sku_id": sku_id,
-            "token": "",
+            "token": prepare_token,
             "newRisk": True,
-            "ignoreRequestLimit": True,
-            "requestSource": "h5",  # 移动端使用 h5
+            "requestSource": "neul-next",
         }
         
-        # 添加移动端特有的请求头  
         mobile_headers = self.headers.copy()
-        
+        logger.debug(f"Prepare请求，携带正确ctoken: {prepare_token}")
         return self._make_api_call('POST', url, mobile_headers, json_data=payload)
 
-    def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, deliver_info=None, buyer=None, tel=None) -> "createJson":
-        logger.debug(f" project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money} buyer_info: {buyer_info} deliver_info: {deliver_info} buyer: {buyer} tel: {tel}")
+    def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":
+        """
+        create请求，携带正确的ctoken和ptoken
+        """
+        logger.debug(f"CREATE: project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money}")
+        
+        # 使用正确的token生成器生成token
+        real_ctoken = self.token_generator.generate_ctoken()
+        
+        if not ptoken:
+            real_ptoken = self.token_generator.generate_ptoken()
+        else:
+            real_ptoken = ptoken
         
         payload = {
-            "buyer_info": json.dumps(buyer_info).replace("'", "\\'"),
             "count": count,
             "pay_money": pay_money * count,
             "project_id": project_id,
@@ -241,19 +284,31 @@ class Api:
             "deviceId": self.device_fingerprints['device_id'],
             "newRisk": True,
             "token": token,
-            "requestSource": "h5",  # 移动端使用 h5
+            "requestSource": "neul-next",
+            "ctoken": real_ctoken,
+            "version": "1.1.0"
         }
+        
+        if buyer_info:
+            payload["buyer_info"] = json.dumps(buyer_info).replace("'", "\\'")
         if deliver_info:
             payload["deliver_info"] = deliver_info
         if buyer and tel:
-            del payload["buyer_info"]
+            if "buyer_info" in payload:
+                del payload["buyer_info"]
             payload["buyer"] = buyer
             payload["tel"] = tel
 
-        # 添加移动端特有的请求头
+        # URL中携带ptoken
+        url = f"https://show.bilibili.com/api/ticket/order/createV2?project_id={project_id}&ptoken={real_ptoken}"
+        
+        # 添加风控头
         mobile_headers = self.headers.copy()
-
-        url = f"https://show.bilibili.com/api/ticket/order/createV2?project_id={project_id}"
+        mobile_headers.update({
+            "X-Bili-Gaia-Vtoken": f"fake_gaia_{random.randint(100000, 999999)}"
+        })
+        
+        logger.debug(f"ctoken: {real_ctoken}\nptoken: {real_ptoken}")
         return self._make_api_call('POST', url, mobile_headers, json_data=payload)
 
     def gaia_vgate_register( self, prepare_json: "prepareJson") -> dict:
@@ -264,86 +319,7 @@ class Api:
         # 使用移动端请求头
         mobile_headers = self.headers.copy()
         return self._make_api_call('POST', url, mobile_headers, json_data=payload)
-    
-    # ===== HOT项目专用函数 =====
-    
-    def hot_prepare(self, project_id, count, screen_id, sku_id) -> "prepareJson":
-        """
-        热门项目的prepare请求，携带假的ctoken
-        """
-        url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
         
-        # 生成假的ctoken
-        fake_ctoken = base64.b64encode(bytes([random.randint(1, 30), 0, random.randint(0, 5), 0, random.randint(0, 3), 0, 0xff, 0, random.randint(0, 5), 0, random.randint(0, 10), 0, 0xff, 0, 0xff, 0, random.randint(0, 5), 0, random.randint(1, 255), 0, 0, 0, 0, 0, 0, 0, 0xff, 0, 0, 0, 0xff, 0])).decode('utf-8')
-        
-        payload = {
-            "project_id": project_id,
-            "count": count,
-            "order_type": 1,
-            "screen_id": screen_id,
-            "sku_id": sku_id,
-            "token": fake_ctoken,  # 使用假的ctoken
-            "newRisk": True,
-            "ignoreRequestLimit": True,
-            "requestSource": "neul-next",  # 热门项目使用neul-next
-        }
-        
-        # 添加风控头
-        mobile_headers = self.headers.copy()
-        
-        logger.info(f"热门项目Prepare请求，携带假ctoken: {fake_ctoken[:20]}...")
-        return self._make_api_call('POST', url, mobile_headers, json_data=payload)
-    
-    def hot_create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":
-        """
-        热门项目的create请求，携带ctoken和ptoken
-        """
-        logger.debug(f"HOT CREATE: project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money}")
-        
-        # 生成假的ctoken和ptoken
-        fake_ctoken = base64.b64encode(bytes([random.randint(1, 30), 0, random.randint(0, 5), 0, random.randint(0, 3), 0, 0xff, 0, random.randint(0, 5), 0, random.randint(0, 10), 0, 0xff, 0, 0xff, 0, random.randint(0, 5), 0, random.randint(1, 255), 0, 0, 0, 0, 0, 0, 0, 0xff, 0, 0, 0, 0xff, 0])).decode('utf-8')
-        
-        if not ptoken:
-            fake_ptoken = base64.b64encode(bytes([0, random.randint(1, 30), 0, 0xff, random.randint(0, 5), 0, 0x04, 0, 0x09, 0, random.randint(0, 5), 0, 0x58, 0, 0x09, 0, random.randint(0, 5), 0, random.randint(1, 255), 0, 0, 0, 0, 0, 0, 0, 0x06, 0, random.randint(0, 10), 0, random.randint(80, 120), 0])).decode('utf-8')
-        else:
-            fake_ptoken = ptoken
-        
-        payload = {
-            "buyer_info": json.dumps(buyer_info).replace("'", "\\'"),
-            "count": count,
-            "pay_money": pay_money * count,
-            "project_id": project_id,
-            "screen_id": screen_id,
-            "sku_id": sku_id,
-            "timestamp": int(round(time.time() * 1000)),
-            "order_type": 1,
-            "deviceId": self.device_fingerprints['device_id'],
-            "newRisk": True,
-            "token": token,
-            "requestSource": "neul-next",  # 热门项目使用neul-next
-            "ctoken": fake_ctoken,  # 添加假的ctoken
-            "version": "1.1.0"
-        }
-        
-        if deliver_info:
-            payload["deliver_info"] = deliver_info
-        if buyer and tel:
-            del payload["buyer_info"]
-            payload["buyer"] = buyer
-            payload["tel"] = tel
-
-        # 添加风控头
-        mobile_headers = self.headers.copy()
-        mobile_headers.update({
-            "X-Bili-Gaia-Vtoken": f"fake_gaia_{random.randint(100000, 999999)}"  # 假的gaia token
-        })
-
-        # URL中携带ptoken
-        url = f"https://show.bilibili.com/api/ticket/order/createV2?project_id={project_id}&ptoken={fake_ptoken}"
-        
-        logger.debug(f"热门项目Create请求，携带假ctoken: {fake_ctoken[:20]}... 和假ptoken: {fake_ptoken[:20]}...")
-        return self._make_api_call('POST', url, mobile_headers, json_data=payload)
-
     def my_info(self,  ) -> "myInfoJson":
         url = 'https://api.bilibili.com/x/space/v2/myinfo?web_location=333.1387'
         # 使用移动端请求头
