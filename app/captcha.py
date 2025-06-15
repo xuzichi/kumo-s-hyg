@@ -11,7 +11,6 @@ try:
     GEETEST_AVAILABLE = True
 except ImportError:
     GEETEST_AVAILABLE = False
-    logger.warning("bili_ticket_gt_python 库未安装，本地滑块验证将无法使用")
 
 
 class CaptchaHandler:
@@ -19,15 +18,24 @@ class CaptchaHandler:
     
     def __init__(self, api_instance):
         self.api = api_instance
-        # 初始化本地滑块处理器
+        self.click = None
+        self._click_initialized = False
+    
+    def _init_click_handler(self):
+        """延迟初始化本地滑块处理器"""
+        if self._click_initialized:
+            return
+        
+        self._click_initialized = True
         if GEETEST_AVAILABLE:
             try:
                 self.click = bili_ticket_gt_python.ClickPy()
-                logger.success("本地滑块处理器初始化成功")
+                logger.info("本地滑块处理器初始化成功")
             except Exception as e:
                 logger.error(f"本地滑块处理器初始化失败: {e}")
                 self.click = None
         else:
+            logger.warning("bili_ticket_gt_python 库未安装，本地滑块验证将无法使用")
             self.click = None
         
     def handle_gaia_validation(self, risk_params: Dict) -> bool:
@@ -120,6 +128,9 @@ class CaptchaHandler:
             logger.warning("检测到本地滑块验证码")
             logger.debug(f"GAIA GeeTest: {gt} {challenge}")
             
+            # 延迟初始化滑块处理器
+            self._init_click_handler()
+            
             # 检查是否有滑块处理器
             if not self.click:
                 logger.error("验证码系统未初始化，无法处理本地滑块")
@@ -180,4 +191,4 @@ class CaptchaHandler:
         """处理手机号验证"""
         return False
     
-# 删除了假数据生成方法，改用bili_ticket_gt_python库处理滑块验证
+

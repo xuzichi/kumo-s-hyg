@@ -1,4 +1,3 @@
-
 import sys
 import os    
 
@@ -34,6 +33,13 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         
     try:
         logger.opt(colors=True).info(f'We1c0me <green>khyg</green> v{__versions__}')
+        
+        # 初始化并显示当前虚拟设备信息
+        from app.device_config import get_current_device
+        current_device = get_current_device()
+        # if current_device:
+            # logger.opt(colors=True).info(f'当前虚拟设备: {current_device.device_name}')
+        
         Main().run()
     except CancelledError:
         logger.info("program exit.")

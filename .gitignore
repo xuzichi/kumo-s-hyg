@@ -1,6 +1,7 @@
 .venv/
 .log/
 .models/*
+.device_configs/*
 
 .DS_Store
 .github/

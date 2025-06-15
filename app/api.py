@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass
 import random
 import hashlib
+import uuid
 
 from .log import logger
 from .captcha import CaptchaHandler
@@ -20,41 +21,186 @@ from .token_generator import create_token_generator
 import yaml
 
 
-class DeviceFingerprint:
-    """轻量级设备指纹生成器"""
-    def __init__(self):
-        self.iphone_models = [
-            'iPhone10,3', 'iPhone10,6',  # iPhone X
-            'iPhone11,2', 'iPhone11,4', 'iPhone11,6', 'iPhone11,8',  # iPhone XS/XS Max/XR
-            'iPhone12,1', 'iPhone12,3', 'iPhone12,5', 'iPhone12,8',  # iPhone 11/11 Pro/11 Pro Max/SE 2nd
-            'iPhone13,1', 'iPhone13,2', 'iPhone13,3', 'iPhone13,4',  # iPhone 12 mini/12/12 Pro/12 Pro Max
-            'iPhone14,2', 'iPhone14,3', 'iPhone14,4', 'iPhone14,5', 'iPhone14,6', 'iPhone14,7', 'iPhone14,8',  # iPhone 13系列/SE 3rd/iPhone 14系列
-            'iPhone15,2', 'iPhone15,3', 'iPhone15,4', 'iPhone15,5',  # iPhone 14 Pro/14 Pro Max/15/15 Plus
-            'iPhone16,1', 'iPhone16,2',  # iPhone 15 Pro/15 Pro Max
-            'iPhone17,1', 'iPhone17,2', 'iPhone17,3', 'iPhone17,4', 'iPhone17,5'   # iPhone 16系列/16e
-        ]
-        self.model = random.choice(self.iphone_models)
-        
-    def get_all_fingerprints(self):
-        """生成所有设备指纹信息"""
-        # 简单的iOS版本随机
+def create_device_fingerprint_generator():
+    IPHONE_MODELS = [
+        'iPhone10,3', 'iPhone10,6',  # iPhone X
+        'iPhone11,2', 'iPhone11,4', 'iPhone11,6', 'iPhone11,8',  # iPhone XS/XS Max/XR
+        'iPhone12,1', 'iPhone12,3', 'iPhone12,5', 'iPhone12,8',  # iPhone 11/11 Pro/11 Pro Max/SE 2nd
+        'iPhone13,1', 'iPhone13,2', 'iPhone13,3', 'iPhone13,4',  # iPhone 12 mini/12/12 Pro/12 Pro Max
+        'iPhone14,2', 'iPhone14,3', 'iPhone14,4', 'iPhone14,5', 'iPhone14,6', 'iPhone14,7', 'iPhone14,8',  # iPhone 13系列/SE 3rd/iPhone 14系列
+        'iPhone15,2', 'iPhone15,3', 'iPhone15,4', 'iPhone15,5',  # iPhone 14 Pro/14 Pro Max/15/15 Plus
+        'iPhone16,1', 'iPhone16,2',  # iPhone 15 Pro/15 Pro Max
+        'iPhone17,1', 'iPhone17,2', 'iPhone17,3', 'iPhone17,4', 'iPhone17,5'   # iPhone 16系列/16e
+    ]
+    
+    IOS_FONTS = [
+        "PingFang SC", "Helvetica Neue", "Arial", "Times New Roman",
+        "Courier New", "Verdana", "Georgia", "Trebuchet MS"
+    ]
+    
+    IOS_GPU_INFO = [
+        "Apple GPU", "Apple A15 Bionic GPU", "Apple A16 Bionic GPU", 
+        "Apple A17 Pro GPU", "Apple M1 GPU"
+    ]
+    
+    WEBGL_EXTENSIONS = [
+        "WEBKIT_WEBGL_compressed_texture_s3tc", "WEBKIT_WEBGL_depth_texture",
+        "OES_texture_float", "OES_texture_half_float", 
+        "OES_standard_derivatives", "EXT_texture_filter_anisotropic"
+    ]
+    
+    SCREEN_RESOLUTIONS = {
+        'iPhone10,3': (1125, 2436),  # iPhone X
+        'iPhone11,2': (1125, 2436),  # iPhone XS
+        'iPhone12,1': (828, 1792),   # iPhone 11
+        'iPhone13,2': (1170, 2532),  # iPhone 12
+        'iPhone14,2': (1170, 2532),  # iPhone 13
+        'iPhone15,2': (1179, 2556),  # iPhone 14 Pro
+    }
+    
+    # === 设备状态 ===
+    device_model = random.choice(IPHONE_MODELS)
+    fingerprint_cache = {
+        'device_id': None,
+        'canvas_fp': None, 
+        'webgl_fp': None
+    }
+    
+    def generate_device_id():
+        """生成设备ID指纹 - 基于JS逆向的generateDeviceFingerPointer实现"""
+        if fingerprint_cache['device_id']:
+            return fingerprint_cache['device_id']
+            
+        # iOS版本和种子组件
         version = f"18.{random.randint(0,5)}.{random.randint(0,3)}"
+        seed_components = [
+            device_model,
+            version.replace('.', ''),
+            str(int(time.time() * 1000))[-8:],  # 时间戳后8位
+            str(random.randint(100000, 999999))  # 随机因子
+        ]
         
-        # 简单的WebKit版本随机
-        webkit_version = f"{random.randint(605,620)}.1.{random.randint(10,50)}"
+        # SHA256哈希生成16位大写十六进制
+        seed_string = ''.join(seed_components)
+        hash_obj = hashlib.sha256(seed_string.encode('utf-8'))
+        fingerprint_cache['device_id'] = hash_obj.hexdigest()[:16].upper()
+        return fingerprint_cache['device_id']
+
+    def generate_canvas_fingerprint():
+        """生成Canvas指纹 - 模拟真实文本绘制和字体渲染"""
+        if fingerprint_cache['canvas_fp']:
+            return fingerprint_cache['canvas_fp']
+            
+        # Canvas绘制内容（基于真实指纹检测文本）
+        canvas_texts = [
+            "BzqvpbVhJ9J8fCqFzq&'*bvJ4DsJBQ\"LVQ*qzKE",  # 指纹检测文本
+            f"iPhone,{device_model}",  # 设备信息
+            "😊🍎🌟",  # emoji测试
+            "hello world 123",  # 简单文本
+        ]
         
-        ua = f"Mozilla/5.0 (iPhone; CPU iPhone OS {version.replace('.', '_')} like Mac OS X) AppleWebKit/{webkit_version} (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/{self.model} mobi_app/iphone build/84800100 osVer/{version} network/wifi channel/AppStore"
+        # 模拟字体渲染差异
+        fonts = ["Arial", "Helvetica", "Times", "Courier"]
+        canvas_data = ""
+        for text in canvas_texts:
+            for font in fonts:
+                render_seed = f"{font}:{text}:{device_model}"
+                canvas_data += hashlib.md5(render_seed.encode()).hexdigest()[:4]
+        
+        fingerprint_cache['canvas_fp'] = hashlib.sha256(canvas_data.encode()).hexdigest()[:32]
+        return fingerprint_cache['canvas_fp']
+    
+    def generate_webgl_fingerprint():
+        """生成WebGL指纹 - 基于真实GPU信息和扩展"""
+        if fingerprint_cache['webgl_fp']:
+            return fingerprint_cache['webgl_fp']
+            
+        # WebGL设备信息
+        webgl_data = {
+            "gpu": random.choice(IOS_GPU_INFO),
+            "extensions": sorted(WEBGL_EXTENSIONS),
+            "shader_precision": "mediump",
+            "max_texture_size": 4096,
+            "device_model": device_model
+        }
+        
+        webgl_string = json.dumps(webgl_data, sort_keys=True)
+        fingerprint_cache['webgl_fp'] = hashlib.sha256(webgl_string.encode()).hexdigest()[:32]
+        return fingerprint_cache['webgl_fp']
+    
+    def generate_additional_fingerprints():
+        """生成附加指纹 - 音频、字体、屏幕等"""
+        # 音频指纹
+        audio_fp = hashlib.md5(f"AudioContext:{device_model}:{time.time()}".encode()).hexdigest()[:16]
+        
+        # 字体指纹
+        font_string = "|".join(sorted(IOS_FONTS))
+        font_fp = hashlib.md5(font_string.encode()).hexdigest()[:16]
+        
+        # 屏幕指纹
+        resolution = SCREEN_RESOLUTIONS.get(device_model, (1170, 2532))
+        screen_fp = hashlib.md5(f"{resolution[0]}x{resolution[1]}:{device_model}".encode()).hexdigest()[:16]
+        
+        return {
+            'audio_fp': audio_fp,
+            'font_fp': font_fp,
+            'screen_fp': screen_fp,
+            'resolution': f"{resolution[0]}x{resolution[1]}"
+        }
+        
+    def generate_version_info():
+        """生成版本信息 - iOS和WebKit版本协调"""
+        # iOS版本生成（真实分布）
+        major_versions = [17, 18]
+        major = random.choice(major_versions)
+        minor = random.randint(0, 6) if major == 17 else random.randint(0, 2)
+        patch = random.randint(0, 3)
+        ios_version = f"{major}.{minor}.{patch}"
+        
+        # WebKit版本（与iOS版本相关）
+        webkit_base = 605 if major == 17 else 618
+        webkit_version = f"{webkit_base + random.randint(0, 15)}.1.{random.randint(10, 99)}"
+        
+        return ios_version, webkit_version
+    
+    # === 统一接口 ===
+    def get_all_fingerprints():
+        """生成完整的设备指纹信息"""
+        ios_version, webkit_version = generate_version_info()
+        additional_fps = generate_additional_fingerprints()
+        
+        # 生成User-Agent
+        ua = (f"Mozilla/5.0 (iPhone; CPU iPhone OS {ios_version.replace('.', '_')} like Mac OS X) "
+              f"AppleWebKit/{webkit_version} (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 "
+              f"os/ios model/{device_model} mobi_app/iphone build/84800100 osVer/{ios_version} "
+              f"network/wifi channel/AppStore")
         
         return {
             'user_agent': ua,
-            'device_id': hashlib.md5(f"iPhone{self.model}{time.time()}".encode()).hexdigest()[:16].upper(),
-            'buvid': f"XU{hashlib.md5(str(random.random()).encode()).hexdigest()[:8].upper()}{hashlib.md5(str(random.random()).encode()).hexdigest()[:24]}",
-            'canvas_fp': ''.join(random.choices('0123456789abcdef', k=32)),
-            'webgl_fp': ''.join(random.choices('0123456789abcdef', k=32)),
-            'fe_sign': ''.join(random.choices('0123456789abcdef', k=32)),
+            'device_id': generate_device_id(),
+            'canvas_fp': generate_canvas_fingerprint(),
+            'webgl_fp': generate_webgl_fingerprint(),
+            'fe_sign': hashlib.sha256(f"{device_model}:{ios_version}:{time.time()}".encode()).hexdigest()[:32],
             'brand': 'iPhone',
-            'model': self.model
+            'model': device_model,
+            'ios_version': ios_version,
+            'webkit_version': webkit_version,
+            **additional_fps
         }
+    
+    # 返回闭包接口
+    return get_all_fingerprints
+
+
+class DeviceFingerprint:
+    """设备指纹生成器 - 基于闭包模式的清晰实现"""
+    def __init__(self):
+        # 创建指纹生成器闭包
+        self._fingerprint_generator = create_device_fingerprint_generator()
+        
+    def get_all_fingerprints(self):
+        """获取所有设备指纹信息"""
+        return self._fingerprint_generator()
 
 
 @dataclass
@@ -106,14 +252,13 @@ class Api:
         self.fingerprint = DeviceFingerprint()
         self.captcha_handler = CaptchaHandler(self)
         
-        # 初始化token生成器，从cookie中提取buvid3
-        buvid3 = None
+        self.buvid3 = None  # 存储真实的buvid3
         if cookie:
             import re
             match = re.search(r'buvid3=([^;]+)', cookie)
             if match:
-                buvid3 = match.group(1)
-        self.token_generator = create_token_generator(buvid3)
+                self.buvid3 = match.group(1)
+        self.token_generator = create_token_generator(self.buvid3)
         
         # 获取动态生成的指纹信息
         fingerprints = self.fingerprint.get_all_fingerprints()
@@ -128,29 +273,32 @@ class Api:
             "Referer": "https://show.bilibili.com/",
             "Cookie": cookie,
             "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+            # 添加更多指纹相关的头
+            "X-Bili-Device-Fp": fingerprints['device_id'],
+            "X-Bili-Canvas-Fp": fingerprints['canvas_fp'][:16],  # 截取前16位
+            "X-Bili-WebGL-Fp": fingerprints['webgl_fp'][:16],
         }
         
         # 存储设备指纹信息
         self.device_fingerprints = fingerprints
-        logger.debug(f"设备指纹已生成: {fingerprints['device_id'][:8]}...")
-        logger.debug(f"动态UA: {fingerprints['user_agent'][:50]}...")
-            
-    
-
-        
-
+        logger.debug(f"设备指纹已生成:")
+        logger.debug(f"  Device ID: {fingerprints['device_id']}")
+        logger.debug(f"  Buvid3: {self.buvid3 or '未从Cookie获取'}")
+        logger.debug(f"  Model: {fingerprints['model']}")
+        logger.debug(f"  iOS Version: {fingerprints['ios_version']}")
+        logger.debug(f"  Canvas FP: {fingerprints['canvas_fp'][:16]}...")
+        logger.debug(f"  WebGL FP: {fingerprints['webgl_fp'][:16]}...")
+        logger.debug(f"  Resolution: {fingerprints['resolution']}")
     
     def set_cookie(self, cookie: str) -> None:
         self.headers["Cookie"] = cookie
         # 更新token生成器的buvid3
-        buvid3 = None
         if cookie:
             import re
             match = re.search(r'buvid3=([^;]+)', cookie)
             if match:
-                buvid3 = match.group(1)
-        if buvid3:
-            self.token_generator = create_token_generator(buvid3)
+                self.buvid3 = match.group(1)
+                self.token_generator = create_token_generator(self.buvid3)
         
     def _make_api_call(self, method: str, url: str, headers: dict, json_data=None, params=None, timeout: int = 120) -> Optional[dict]:
         """增强的API调用方法，支持错误处理和风控检测"""
@@ -164,7 +312,11 @@ class Api:
                     "platform": "ios",
                     "version": "8.48.0",
                     "device_type": self.device_fingerprints['model'],
-                    "network": "wifi"
+                    "network": "wifi",
+                    "device_id": self.device_fingerprints['device_id'],
+                    "canvas_fp": self.device_fingerprints['canvas_fp'][:16],
+                    "webgl_fp": self.device_fingerprints['webgl_fp'][:16],
+                    "screen_resolution": self.device_fingerprints['resolution']
                 }
                 enhanced_headers["X-Bili-Device-Req-Json"] = json.dumps(device_info)
             
@@ -262,12 +414,7 @@ class Api:
     def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":
         """
         create请求，携带正确的ctoken和ptoken
-        """
-        logger.debug(f"CREATE: project_id: {project_id} token: {token} screen_id: {screen_id} sku_id: {sku_id} count: {count} pay_money: {pay_money}")
-        
-        # 使用正确的token生成器生成token
-        real_ctoken = self.token_generator.generate_ctoken()
-        
+        """                
         if not ptoken:
             real_ptoken = self.token_generator.generate_ptoken()
         else:
@@ -285,9 +432,10 @@ class Api:
             "newRisk": True,
             "token": token,
             "requestSource": "neul-next",
-            "ctoken": real_ctoken,
+            "ctoken": self.token_generator.generate_ctoken(),
             "version": "1.1.0"
         }
+        logger.debug(f"CREATE: {json.dumps(payload, indent=4)}")
         
         if buyer_info:
             payload["buyer_info"] = json.dumps(buyer_info).replace("'", "\\'")
@@ -308,7 +456,7 @@ class Api:
             "X-Bili-Gaia-Vtoken": f"fake_gaia_{random.randint(100000, 999999)}"
         })
         
-        logger.debug(f"ctoken: {real_ctoken}\nptoken: {real_ptoken}")
+        # logger.debug(f"ctoken: {real_ctoken}\nptoken: {real_ptoken}")
         return self._make_api_call('POST', url, mobile_headers, json_data=payload)
 
     def gaia_vgate_register( self, prepare_json: "prepareJson") -> dict:
@@ -375,15 +523,48 @@ class Api:
             return cookie_str
                 
         try:
-            # 使用移动端请求头
+            # 使用设备配置文件中的设备信息
+            from app.device_config import create_device_fingerprint_with_config
+            device_info = create_device_fingerprint_with_config()
+            if not device_info:
+                logger.error("无法获取设备配置信息")
+                return None
+            
+            # 构建真实的移动端请求头
             mobile_headers = {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/621.2.5.10.10 (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 os/ios model/iPhone 16 Pro Max mobi_app/iphone build/84800100 osVer/18.5 network/2 channel/AppStore Buvid/YC45E6C974DE0A5D43D28E060E5F0779661D c_locale/zh-Hans_CN s_locale/zh_CN sessionID/d11718ec disable_rcmd/0 timezone/Asia/Shanghai utcOffset/+08:00 isDaylightTime/0 alwaysTranslate/0 ipRegion/CN legalRegion/CN themeId/1 sh/62 mallVersion=8480000 mVersion=309 flutterNotch=1 magent=BILI_H5_IOS_18.5_8.48.0_84800100",
+                "User-Agent": device_info['user_agent'],
                 "Accept": "application/json, text/plain, */*",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
                 "Referer": "https://www.bilibili.com/",
                 "X-Bili-Trace-Id": f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0",
+                # 添加设备指纹头
+                "X-Bili-Device-Fp": device_info['device_id'],
+                "X-Bili-Canvas-Fp": device_info['canvas_fp'][:16],
+                "X-Bili-WebGL-Fp": device_info['webgl_fp'][:16],
             }
             session = requests.session()
+            
+            # 在session中设置真实的设备信息
+            session.cookies.set('b_nut', str(int(time.time())), domain='.bilibili.com')
+            session.cookies.set('buvid3', f"{device_info['device_id']}infoc", domain='.bilibili.com')
+            session.cookies.set('buvid4', f"u{device_info['device_id'][:8]}-{device_info['device_id'][8:]}-{int(time.time()*1000)}-{device_info['device_id'][8:16]}infoc", domain='.bilibili.com')
+            session.cookies.set('_uuid', device_info['device_id'].lower(), domain='.bilibili.com')
+            
+            # 更新请求头，添加设备相关信息
+            mobile_headers.update({
+                "X-Bili-Gaia-Vtoken": f"fake_gaia_{random.randint(100000, 999999)}",
+                "X-Bili-Device-Req-Json": json.dumps({
+                    "platform": "ios",
+                    "version": "8.48.0",
+                    "device_type": device_info['model'],
+                    "network": "wifi",
+                    "device_id": device_info['device_id'],
+                    "canvas_fp": device_info['canvas_fp'][:16],
+                    "webgl_fp": device_info['webgl_fp'][:16],
+                    "screen_resolution": device_info['resolution']
+                })
+            })
+            
             session.get("https://www.bilibili.com/", headers=mobile_headers)
             generate = session.get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate", headers=mobile_headers).json()
 

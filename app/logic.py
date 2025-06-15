@@ -66,7 +66,7 @@ class Logic():
         self.config =  config
         
         self.wait_invoice = config["setting"]["wait_invoice"]
-        self.interval =config["setting"]["interval"]
+        self.interval = 0.9  # 全局尝试订单请求间隔, 0.9 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔
     
     def wait_for_sale_start(self):
         """等待开票时间到达"""
