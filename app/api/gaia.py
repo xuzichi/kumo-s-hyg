@@ -3,7 +3,7 @@ import base64
 import time
 import random
 from typing import Optional, Dict, Any
-from .log import logger
+from ..log import logger
 import requests
 
 try:
@@ -13,8 +13,8 @@ except ImportError:
     GEETEST_AVAILABLE = False
 
 
-class CaptchaHandler:
-    """验证码处理器 - 轻量级实现"""
+class GaiaHandler:
+    """Gaia风控处理器 - 轻量级实现"""
     
     def __init__(self, api_instance):
         self.api = api_instance

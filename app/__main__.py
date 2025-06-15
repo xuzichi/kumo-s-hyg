@@ -5,9 +5,7 @@ from noneprompt import CancelledError
 from .log import init_log, logger
 from app.screen import Main
 
-from .api import Api
-
-__versions__ = "0.2.1"
+__versions__ = "0.3.0"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -37,8 +35,6 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         # 初始化并显示当前虚拟设备信息
         from app.device_config import get_current_device
         current_device = get_current_device()
-        # if current_device:
-            # logger.opt(colors=True).info(f'当前虚拟设备: {current_device.device_name}')
         
         Main().run()
     except CancelledError:

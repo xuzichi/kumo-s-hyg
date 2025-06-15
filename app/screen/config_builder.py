@@ -1,8 +1,10 @@
+"""
+配置构建器 - 负责创建和编辑配置文件
+"""
+
 import traceback
 import time
 import yaml
-import os
-import subprocess
 from pathlib import Path
 
 from noneprompt import (
@@ -14,10 +16,8 @@ from noneprompt import (
     ConfirmPrompt,
 )
 
-from app.logic import Logic
-from app.order import Order
-from .log import logger
-from .api import Api
+from ..log import logger
+from ..api import Api
 
 
 class ConfigBuilder:
@@ -42,7 +42,7 @@ class ConfigBuilder:
                             if not self._login():
                                 return
                         else:
-                            logger.opt(colors=True).info(f'使用配置文件中的登录信息: <green>{my_info_json["data"]["profile"]["name"]}</green>')
+                            logger.opt(colors=True).info(f'使用配置文件中的登录信息: {my_info_json["data"]["profile"]["name"]}')
                     else:
                         logger.error("配置文件中没有找到cookie，需要重新登录")
                         if not self._login():
@@ -170,7 +170,7 @@ class ConfigBuilder:
                 try:
                     self.api.set_cookie(self.cookie)
                     my_info_json = self.api.my_info()
-                    logger.opt(colors=True).info(f'登录用户: <green>{my_info_json["data"]["profile"]["name"]}</green>')
+                    logger.opt(colors=True).info(f'登录用户: {my_info_json["data"]["profile"]["name"]}')
                     # 等待一下确保界面稳定
                     return True
                 except Exception as e:
@@ -203,7 +203,7 @@ class ConfigBuilder:
         project_json = self.api.project(project_id=project_id)
         logger.debug(project_json)
         try:
-            logger.opt(colors=True).info(f'项目信息: <green>{project_json["data"]["name"]}</green> {project_json["data"]["sale_flag"]}')
+            logger.opt(colors=True).info(f'项目信息: {project_json["data"]["name"]} {project_json["data"]["sale_flag"]}')
         except Exception as e:
             logger.error(f"获取项目信息失败, 请检查项目ID是否正确")
             return None
@@ -437,7 +437,6 @@ cookie: {self.cookie}
 
         return config_str
 
-
     def _save_config(self, config_str, project_json, existing_path=None):
         """保存配置文件"""
         if existing_path:
@@ -473,365 +472,4 @@ cookie: {self.cookie}
         logger.success(f'配置文件已保存为 {config_name}.yml')
         
         # 重置模板配置
-        self.template_config = None
-
-
-class ConfigManager:
-    def __init__(self):
-        pass
-
-    def edit_config(self):
-        """编辑配置文件"""
-        config_files = list(Path("config").glob("*.yml"))
-        if not config_files:
-            logger.error("config文件夹中没有配置文件")
-            return
-
-        # 按修改时间排序
-        config_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        
-        choices = []
-        for config_file in config_files:
-            try:
-                with open(config_file, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-                    project_id = config.get('project_id', '未知')
-                    
-                mtime = config_file.stat().st_mtime
-                time_str = time.strftime('%m-%d %H:%M', time.localtime(mtime))
-                choice_text = f"{config_file.stem} ({time_str})"
-                choices.append(Choice(choice_text, data=config_file))
-            except Exception as e:
-                choice_text = f"{config_file.stem} (配置文件损坏)"
-                choices.append(Choice(choice_text, data=config_file))
-
-        selected_file = ListPrompt(
-            "请选择要编辑的配置文件:",
-            choices=choices + [Choice("← 返回", data="back")]
-        ).prompt()
-        
-        if selected_file.data == "back":
-            return
-
-        # 直接使用配置构建器重新构建
-        builder = ConfigBuilder()
-        builder.rebuild_config_from_existing(selected_file.data)
-
-    def delete_config(self):
-        """删除配置文件"""
-        config_files = list(Path("config").glob("*.yml"))
-        if not config_files:
-            logger.error("config文件夹中没有配置文件")
-            return
-
-        # 按修改时间排序
-        config_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        
-        choices = []
-        for config_file in config_files:
-            try:
-                with open(config_file, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-                    project_id = config.get('project_id', '未知')
-                    
-                mtime = config_file.stat().st_mtime
-                time_str = time.strftime('%m-%d %H:%M', time.localtime(mtime))
-                choice_text = f"{config_file.stem} ({time_str})"
-                choices.append(Choice(choice_text, data=config_file))
-            except Exception as e:
-                choice_text = f"{config_file.stem} (配置文件损坏)"
-                choices.append(Choice(choice_text, data=config_file))
-
-        selected_file = ListPrompt(
-            "请选择要删除的配置文件:",
-            choices=choices + [Choice("← 返回", data="back")]
-        ).prompt()
-        
-        if selected_file.data == "back":
-            return
-
-        # 确认删除
-        confirm = ConfirmPrompt(
-            f"确定要删除配置文件 {selected_file.data.name} 吗？此操作不可恢复！"
-        ).prompt()
-        
-        if confirm:
-            try:
-                selected_file.data.unlink()
-                logger.success(f"配置文件 {selected_file.data.name} 已删除")
-            except Exception as e:
-                logger.error(f"删除配置文件失败: {e}")
-        else:
-            pass
-
-
-class Main:
-    def __init__(self):
-        self.cookie: str = None
-        self.api = Api()
-        self.template_config = None  # 用于存储模板配置
-        if not Path("config").exists():            
-            Path("config").mkdir(parents=True, exist_ok=True)
-            
-    def run(self):
-        while True:
-            # 读取所有配置文件并按修改时间排序
-            config_files = list(Path("config").glob("*.yml"))
-            config_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            
-            # 构建选择列表
-            choices = []
-            
-            if config_files:
-                for config_file in config_files:
-                    try:
-                        with open(config_file, "r", encoding="utf-8") as f:
-                            config = yaml.safe_load(f)                                                    
-                        choices.append(Choice(config_file.stem, data=("run", config_file)))
-                    except Exception as e:
-                        choice_text = f"{config_file.stem} (配置文件损坏)"
-                        choices.append(Choice(choice_text, data=("run", config_file)))
-            else:
-                choices.append(Choice("暂无配置文件，请先生成配置", data="no_config"))
-            
-            choices.append(Choice("+ 新建配置", data="new"))
-            choices.append(Choice("W 编辑配置", data="edit"))
-            choices.append(Choice("- 删除配置", data="delete"))
-            choices.append(Choice("V 虚拟设备", data="device_manage"))
-            choices.append(Choice("← 退出", data="exit"))
-            
-            _ = ListPrompt(
-                "请选择操作:",
-                choices=choices
-            ).prompt()
-            
-            try:
-                if _.data == "new":
-                    self.build_config()
-                elif _.data == "edit":
-                    self.edit_config()
-                elif _.data == "delete":
-                    self.delete_config()
-                elif _.data == "device_manage":
-                    self.show_device_management()
-                elif isinstance(_.data, tuple) and _.data[0] == "run":
-                    config_file = _.data[1]
-                    self.run_by_config(config_file)
-                elif _.data == "no_config":
-                    logger.opt(colors=True).info('请先生成配置文件')
-                    continue
-                elif _.data == "exit":
-                    logger.opt(colors=True).info('exit, bye!')
-                    break
-            except CancelledError:
-                continue
-            except KeyboardInterrupt:
-                continue
-            except Exception as e:
-                logger.error(f'发生错误: {e}')
-                logger.debug(f'发生错误: \n{traceback.format_exc()}')
-
-    def build_config(self, existing_config_path=None):
-        """构建新的配置文件或编辑现有配置文件"""
-        builder = ConfigBuilder()
-        builder.build_config(existing_config_path)
-
-    def edit_config(self):
-        """编辑配置文件"""
-        manager = ConfigManager()
-        manager.edit_config()
-
-    def delete_config(self):
-        """删除配置文件"""
-        manager = ConfigManager()
-        manager.delete_config()
-    
-    def create_new_device(self):
-        """创建新虚拟设备 - 完全自动化"""
-        from app.device_config import generate_virtual_device
-        
-        try:
-            logger.opt(colors=True).info('正在生成新虚拟设备...')
-            new_device = generate_virtual_device(set_as_default=False)
-            
-            logger.opt(colors=True).success(f'虚拟设备 "{new_device.device_name}" 创建成功')
-            logger.opt(colors=True).info(f'设备型号: {new_device.model}')
-            logger.opt(colors=True).info(f'iOS版本: {new_device.ios_version}')
-                
-        except Exception as e:
-            logger.error(f"创建虚拟设备时出错: {e}")
-    
-    def delete_device(self):
-        """删除虚拟设备"""
-        from app.device_config import list_devices, delete_device
-        
-        devices = list_devices()
-        if not devices:
-            logger.opt(colors=True).info('暂无可删除的虚拟设备')
-            return
-        
-        choices = []
-        for device_info in devices:
-            device_name = f"{device_info['device_name']} ({device_info['model']})"
-            choices.append(Choice(device_name, data=device_info['device_id']))
-        
-        choices.append(Choice("取消", data="cancel"))
-        
-        selection = ListPrompt(
-            "选择要删除的虚拟设备:",
-            choices=choices
-        ).prompt()
-        
-        if selection.data == "cancel":
-            return
-        
-        # 确认删除
-        device_info = next(dev for dev in devices if dev['device_id'] == selection.data)
-        confirm = ConfirmPrompt(
-            f"确定要删除虚拟设备 \"{device_info['device_name']}\" 吗？此操作不可恢复！"
-        ).prompt()
-        
-        if confirm:
-            if delete_device(selection.data):
-                logger.opt(colors=True).success('虚拟设备已删除')
-            else:
-                logger.error("删除虚拟设备失败")
-
-    def run_by_config(self, config_name):
-        with open(config_name, "r", encoding="utf-8") as f:
-            try:
-                config = yaml.safe_load(f)
-                self.api.set_cookie(config['cookie'])
-                my_info_json = self.api.my_info()
-                if my_info_json['code'] == -101:
-                    logger.error("cookie已实效, 请重新登录.")
-                    return
-                
-                # 获取当前虚拟设备信息
-                from app.device_config import get_current_device
-                current_device = get_current_device()
-                device_name = current_device.device_name if current_device else "未知设备"
-                user_name = my_info_json["data"]["profile"]["name"]
-                
-                
-                # 获取项目详细信息
-                project_json = self.api.project(project_id=config['project_id'])
-                
-                # 打印配置摘要信息
-                logger.opt(colors=True).info('─' * 50)
-                logger.opt(colors=True).info(f'<cyan>【配置摘要】</cyan>')
-                logger.opt(colors=True).info(f'项目名称: {project_json["data"]["name"]}')
-                logger.opt(colors=True).info(f'虚拟设备: {device_name}')
-                logger.opt(colors=True).info(f'登录用户: {user_name}')
-                
-                # 打印票种信息
-                if 'screen_ticket' in config and config['screen_ticket']:
-                    for ticket_info in config['screen_ticket']:
-                        screen_idx, ticket_idx = ticket_info
-                        if screen_idx < len(project_json['data']['screen_list']) and ticket_idx < len(project_json['data']['screen_list'][screen_idx]['ticket_list']):
-                            screen = project_json['data']['screen_list'][screen_idx]
-                            ticket = screen['ticket_list'][ticket_idx]
-                            price_yuan = ticket['price'] / 100
-                            logger.opt(colors=True).info(f'选择票种: {screen["name"]} {ticket["desc"]} {price_yuan}元')
-                
-                # 打印地址信息（如果有）
-                if 'address_index' in config and config['address_index']:
-                    address_json = self.api.address()
-                    for addr_idx in config['address_index']:
-                        if addr_idx < len(address_json['data']['addr_list']):
-                            addr = address_json['data']['addr_list'][addr_idx]
-                            if project_json['data'].get('has_paper_ticket', False):
-                                logger.opt(colors=True).info(f'收货地址: {addr["name"]} {addr["phone"]} {addr["prov"]}{addr["city"]}{addr["area"]}{addr["addr"]}')
-                            else:
-                                logger.opt(colors=True).info(f'记名信息: {addr["name"]} {addr["phone"]}')
-                
-                # 打印购票人信息（如果有）
-                if 'buyer_index' in config and config['buyer_index']:
-                    buyer_json = self.api.buyer()
-                    for buyer_idx in config['buyer_index']:
-                        if buyer_idx < len(buyer_json['data']['list']):
-                            buyer = buyer_json['data']['list'][buyer_idx]
-                            masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
-                            logger.opt(colors=True).info(f'购票人: {buyer["name"]} {masked_id}')
-                
-                # 打印购票数量（非实名制）
-                if 'count' in config:
-                    logger.opt(colors=True).info(f'购票数量: {config["count"]}张')
-                    
-                logger.opt(colors=True).info('─' * 50)
-                logger.opt(colors=True).info('<cyan>即将开始抢票...</cyan>')
-                
-            except Exception as e:  
-                logger.error("读取配置文件失败, 请检查配置文件格式")
-                import traceback
-                logger.debug(traceback.format_exc())
-                return
-                
-            try:
-                Logic(
-                    order=Order(
-                        cookie=config['cookie'],
-                        project_id=config['project_id']
-                        ),
-                    config=config,
-                    ).run()
-            except CancelledError:
-                return
-            except KeyboardInterrupt:
-                return
-            except Exception as e:
-                import traceback
-                logger.debug(traceback.format_exc())
-                raise e 
-
-    def show_device_management(self):
-        """显示设备管理界面"""
-        from app.device_config import list_devices, get_current_device, set_default_device
-        
-        while True:
-            devices = list_devices()
-            current_device = get_current_device()
-            
-            choices = []
-            
-            # 显示设备列表
-            if devices:
-                for device_info in devices:
-                    is_default = current_device and current_device.device_id == device_info['device_id']
-                    status = " (当前设备)" if is_default else ""
-                    device_name = f"{device_info['device_name']}{status}"
-                    choices.append(Choice(device_name, data=("select", device_info['device_id'])))
-            else:
-                choices.append(Choice("暂无虚拟设备", data="no_device"))
-            
-            choices.extend([
-                Choice("+ 生成新设备", data="create"),
-                Choice("- 删除设备", data="delete") if devices else None,
-                Choice("← 返回", data="back")
-            ])
-            
-            # 过滤掉None选项
-            choices = [c for c in choices if c is not None]
-            
-            selection = ListPrompt(
-                "V 虚拟设备管理:",
-                choices=choices
-            ).prompt()
-            
-            try:
-                if selection.data == "create":
-                    self.create_new_device()
-                elif selection.data == "delete":
-                    self.delete_device()
-                elif isinstance(selection.data, tuple) and selection.data[0] == "select":
-                    device_id = selection.data[1]
-                    if set_default_device(device_id):
-                        logger.opt(colors=True).success('已设置为当前设备')
-                    else:
-                        logger.error("设置当前设备失败")
-                elif selection.data == "no_device":
-                    logger.opt(colors=True).info('暂无虚拟设备，请先生成')
-                elif selection.data == "back":
-                    break
-            except CancelledError:
-                continue 
+        self.template_config = None 

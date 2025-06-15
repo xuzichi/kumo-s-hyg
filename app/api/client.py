@@ -15,8 +15,8 @@ import random
 import hashlib
 import uuid
 
-from .log import logger
-from .captcha import CaptchaHandler
+from ..log import logger
+from .gaia import GaiaHandler
 from .token_generator import create_token_generator
 import yaml
 
@@ -250,7 +250,7 @@ class Api:
     def __init__(self, cookie: Optional[str] = None) -> None:
         # 初始化设备指纹生成器
         self.fingerprint = DeviceFingerprint()
-        self.captcha_handler = CaptchaHandler(self)
+        self.gaia_handler = GaiaHandler(self)
         
         self.buvid3 = None  # 存储真实的buvid3
         if cookie:

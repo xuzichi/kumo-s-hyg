@@ -187,7 +187,7 @@ class Logic():
                         self.order.confirm()
                         order_attempt = 0 
                         continue
-                    elif error_code in [100003, 100079, 100016, 100039]:
+                    elif error_code in [100003, 100079, 100016, 100039, 100048]:
                         logger.warning(f"{error_msg}")
                         break  # 项目相关错误，直接退出
                     

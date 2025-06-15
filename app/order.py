@@ -140,7 +140,7 @@ class Order:
         # 检查并缓存项目类型（仅用于提示）
         self._is_hot_project = project_json.get("data", {}).get("hotProject", False)
         if self._is_hot_project:
-            logger.opt(colors=True).warning("当前项目为热门项目")
+            logger.opt(colors=True).warning("<red>当前项目为热门项目, 可能出现任何意外情况, 请不要孤注一掷.</red>")
             
             
 
