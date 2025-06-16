@@ -1,3 +1,2 @@
 from .main import Main
-
-__all__ = ['Main'] 
+from .account_screen import AccountScreen

@@ -9,7 +9,7 @@ _app_old/
 app/.DS_Store
 config/
 
-
+./account/
 c.js
 
 i.js

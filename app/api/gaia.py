@@ -50,24 +50,27 @@ class GaiaHandler:
             captcha_type = register_result.get("type", "")
             
             # 2. 根据验证码类型处理
-            if captcha_type == "":
+            match captcha_type:
                 # 直接验证
-                return self._validate_direct(token)
-            elif captcha_type == "geetest":
+                case "":
+                    return self._validate_direct(token)
                 # 本地滑块验证码
-                return self._handle_geetest(token, register_result)
-            elif captcha_type == "img":
+                case "geetest":
+                    return self._handle_geetest(token, register_result)
                 # 图片验证码
-                return self._handle_image_captcha(token)
-            elif captcha_type == "sms":
+                case "img":
+                    return self._handle_image_captcha(token)
                 # 短信验证码
-                return self._handle_sms_captcha(token)
-            elif captcha_type == "phone":
+                case "sms":
+                    return self._handle_sms_captcha(token)
                 # 手机号验证
-                return self._handle_phone_validation(token, register_result)
-            else:
-                logger.warning(f"不支持的验证码类型: {captcha_type}")
-                return False
+                case "phone":
+                    return self._handle_phone_validation(token, register_result)
+                # 不支持的验证码类型
+                case _:
+                    logger.warning(f"不支持的验证码类型: {captcha_type}")
+                    return False
+
                 
         except Exception as e:
             logger.error(f"验证码处理失败: {e}")

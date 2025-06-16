@@ -9,7 +9,7 @@ if not os.path.exists("logs"):
     
 def init_log(log_level):
 # 设置日志文件
-    log_file = "logs/bhyg.log"
+    log_file = "logs/khyg.log"
     # 设置日志格式
     log_format = "<green>{time:HH:mm:ss.S}</green> <level>[{level}]</level> {message}"
     # 添加日志文件
@@ -21,7 +21,6 @@ def init_log(log_level):
         format=log_format,
         # level=log_level,  # 文件日志级别
         rotation="1 MB",
-        compression="zip",
     )
 
     # 控制台日志（同样按 log_level 过滤）

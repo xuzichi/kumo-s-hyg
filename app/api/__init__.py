@@ -1,10 +1,9 @@
 """
-API 模块 - 整合 API 调用、风控处理和 token 生成
+API 模块 - 整合 API 调用、风控处理、用户管理
 """
 
 from .client import (
-    Api, 
-    create_device_fingerprint_generator,
+    Client, 
     BuyerJson,
     AddressJson, 
     ProjectJson,
@@ -16,21 +15,6 @@ from .client import (
     ProjectInfoByDateJson
 )
 from .gaia import GaiaHandler
-from .token_generator import BiliTokenGenerator, create_token_generator
 
-__all__ = [
-    'Api', 
-    'GaiaHandler', 
-    'BiliTokenGenerator', 
-    'create_token_generator', 
-    'create_device_fingerprint_generator',
-    'BuyerJson',
-    'AddressJson', 
-    'ProjectJson',
-    'confirmJson',
-    'prepareJson',
-    'createJson',
-    'myInfoJson',
-    'createStatusJson',
-    'ProjectInfoByDateJson'
-] 
+# 兼容: 保留旧名称 Api 指向 Client
+Api = Client

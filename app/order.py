@@ -23,19 +23,21 @@ from noneprompt import (
 from .log import logger
 import yaml
 
-from .api import Api
+from .api import Client
 from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
-
-
-
 
 
 class Order:
     ssl._create_default_https_context = ssl._create_unverified_context
 
-    def __init__(self, *, cookie: str, project_id: int = None) -> None:
+    def __init__(self, *, cookie: str, project_id: int = None, device=None) -> None:
         self.project_id: int = project_id
-        self.api = Api(cookie=cookie)
+        self.api = Client()
+        self.api.load_cookie(cookie)
+
+        # 如果提供了虚拟设备，则绑定到 Api
+        if device is not None:
+            self.api.set_device(device)
 
         # self中的变量应该是最终构成 prepare / confirm / create 的参数
         self.screen_id: Optional[int] = None  # 场次
@@ -57,7 +59,6 @@ class Order:
         ### param:
         - config: 购票配置, 具体见下方说明.
         
-        ### 随便写点什么:
         - screen_idx: 场次索引.
         - ticket_index: 票种索引.
         - project_json: 项目json.

@@ -25,7 +25,7 @@ from noneprompt import (
 from .log import logger
 import yaml
 from .order import Order
-from .api import Api
+from .api import Client
 from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 
 
@@ -59,82 +59,18 @@ ERROR_HANDLERS = {
 }
 
 
-
 class Logic():
     def __init__(self, order: Order, config: dict) -> None:
         self.order = order 
         self.config =  config
         
-        self.wait_invoice = config["setting"]["wait_invoice"]
+        self.wait_invoice = config.get("wait_invoice", False)
         self.interval = 0.9  # 全局尝试订单请求间隔, 0.9 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔
     
-    def wait_for_sale_start(self):
-        """等待开票时间到达"""
-        current_time = int(time.time())
-        sale_start_time = self.order.sale_start
-        
-        if current_time >= sale_start_time:
-            logger.opt(colors=True).info("<green>已到开票时间，立即开始抢票!</green>")
-            return
-        
-        # 格式化开票时间
-        sale_start_dt = datetime.fromtimestamp(sale_start_time)
-        sale_start_str = sale_start_dt.strftime("%Y-%m-%d %H:%M:%S")
-        
-        logger.opt(colors=True).info(f"<cyan>等待开票中...</cyan>")
-        logger.opt(colors=True).info(f"开票时间: <yellow>{sale_start_str}</yellow>")
-        
-        while True:
-            current_time = time.time()  # 使用float精度
-            remaining_seconds = sale_start_time - current_time
-            
-            # 提前0.3秒开始抢票
-            if remaining_seconds <= 0.3:
-                logger.opt(colors=True).info("<green>开始抢票！</green>")
-                break
-            
-            # 计算剩余时间
-            remaining_time = timedelta(seconds=remaining_seconds)
-            
-            # 格式化剩余时间
-            if remaining_seconds >= 3600:  # 超过1小时
-                time_str = str(remaining_time).split('.')[0]  # 去掉微秒
-            elif remaining_seconds >= 60:  # 超过1分钟
-                minutes = remaining_seconds // 60
-                seconds = remaining_seconds % 60
-                time_str = f"{minutes:02d}:{seconds:02d}"
-            else:  # 少于1分钟
-                time_str = f"{remaining_seconds}秒"
-            
-            current_dt = datetime.fromtimestamp(current_time)
-            current_str = current_dt.strftime("%H:%M:%S")
-            
-            if remaining_seconds <= 60:
-                logger.opt(colors=True).info(f"<red>⏰ {current_str} | 倒计时: {time_str}</red>")
-            elif remaining_seconds <= 300:
-                logger.opt(colors=True).info(f"<yellow>⏰ {current_str} | 剩余: {time_str}</yellow>")
-            else:
-                logger.opt(colors=True).info(f"<cyan>⏰ {current_str} | 剩余: {time_str}</cyan>")
-            
-            # 等待间隔：剩余时间越短，更新越频繁
-            if remaining_seconds <= 5:
-                time.sleep(0.1)  # 最后5秒，每0.1秒更新（更精确）
-            elif remaining_seconds <= 10:
-                time.sleep(0.5)  # 最后10秒，每0.5秒更新
-            elif remaining_seconds <= 60:
-                time.sleep(1)    # 最后1分钟，每秒更新
-            elif remaining_seconds <= 300:
-                time.sleep(5)    # 最后5分钟，每5秒更新
-            else:
-                time.sleep(10)   # 其他时间，每10秒更新
-            
     def run(self):
         try:                        
             # build 参数（会自动检测项目类型）
             self.order.build(config=self.config)
-            
-            if self.wait_invoice: # 等待开票
-                self.wait_for_sale_start()
             
             # 执行prepare和confirm
             self.order.prepare()
@@ -180,7 +116,7 @@ class Logic():
                         time.sleep(30)
                         order_attempt = 0  # 重置计数器
                         continue
-                    elif error_code == 100051:
+                    elif error_code == 100051 or error_code == 100050:
                         logger.warning(f"{error_msg}")
                         # 重新prepare和confirm
                         self.order.prepare()
