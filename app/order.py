@@ -23,8 +23,8 @@ from noneprompt import (
 from .log import logger
 import yaml
 
-from .api import Client
-from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
+from .client import Client
+from .client import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 
 
 class Order:

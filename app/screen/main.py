@@ -18,7 +18,7 @@ from noneprompt import (
 from app.logic import Logic
 from app.order import Order
 from ..log import logger
-from ..api import Client
+from ..client import Client
 from .config_builder import ConfigBuilder
 from app import account_manager
 from .config_executor import ConfigExecutor

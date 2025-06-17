@@ -1,0 +1,9 @@
+# 主要依赖
+requests
+noneprompt
+PyYAML
+qrcode
+loguru
+pillow
+bili_ticket_gt_python 
+pillow

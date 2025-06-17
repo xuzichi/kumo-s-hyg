@@ -19,7 +19,7 @@ from noneprompt import (
 )
 
 from ..log import logger
-from ..api import Client
+from ..client import Client
 
 # 新增：账号管理
 from .account_screen import AccountScreen

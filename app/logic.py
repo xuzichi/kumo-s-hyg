@@ -25,8 +25,8 @@ from noneprompt import (
 from .log import logger
 import yaml
 from .order import Order
-from .api import Client
-from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
+from .client import Client
+from .client import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 from .push_manager import push_manager
 
 # 错误码处理增强

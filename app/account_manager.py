@@ -19,7 +19,7 @@ from app.virtual_device import VirtualDevice, Account
 
 # 避免运行时循环依赖，仅在类型检查时导入 Api
 if TYPE_CHECKING:
-    from app.api.client import Client
+    from app.client import Client
 
 # 使用统一的日志封装
 from .log import logger

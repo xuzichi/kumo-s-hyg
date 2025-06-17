@@ -3,14 +3,16 @@ import base64
 import time
 import random
 from typing import Optional, Dict, Any
-from ..log import logger
+from .log import logger
 import requests
+
 
 try:
     import bili_ticket_gt_python
     GEETEST_AVAILABLE = True
 except ImportError:
     GEETEST_AVAILABLE = False
+    logger.warning("bili_ticket_gt_python 库未安装，本地滑块验证将无法使用")
 
 
 class GaiaHandler:
@@ -30,9 +32,7 @@ class GaiaHandler:
         if GEETEST_AVAILABLE:
             try:
                 self.click = bili_ticket_gt_python.ClickPy()
-                logger.info("本地滑块处理器初始化成功")
             except Exception as e:
-                logger.error(f"本地滑块处理器初始化失败: {e}")
                 self.click = None
         else:
             logger.warning("bili_ticket_gt_python 库未安装，本地滑块验证将无法使用")

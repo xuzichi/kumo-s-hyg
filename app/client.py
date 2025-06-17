@@ -19,12 +19,12 @@ import urllib.parse
 
 from app.virtual_device import create_virtual_device
 
-from ..log import logger
+from .log import logger
 from .gaia import GaiaHandler
 import yaml
 
 if TYPE_CHECKING:
-    from ..account_manager import VirtualDevice
+    from .account_manager import VirtualDevice
 
 
 @dataclass

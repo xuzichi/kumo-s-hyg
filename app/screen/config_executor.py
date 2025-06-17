@@ -18,7 +18,7 @@ from noneprompt import (
 from app.logic import Logic
 from app.order import Order
 from ..log import logger
-from ..api import client
+from .. import client
 from .config_builder import ConfigBuilder
 from app import account_manager
 
@@ -56,7 +56,7 @@ class ConfigExecutor:
 
             if choice.data == "copy":
                 base_name = config_path.stem
-                m = re.search(r"_(\d+)$", base_name)
+                m = re.search(r"_copy_(\d+)$", base_name)
                 if m:
                     base_root = base_name[: -len(m.group(0))]
                     next_index = int(m.group(1)) + 1
@@ -66,7 +66,7 @@ class ConfigExecutor:
 
                 # 寻找可用文件名
                 while True:
-                    candidate = f"{base_root}_{next_index}"
+                    candidate = f"{base_root}_copy_{next_index}"
                     if not (config_path.parent / f"{candidate}.yml").exists():
                         break
                     next_index += 1

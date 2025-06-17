@@ -5,7 +5,7 @@ from noneprompt import CancelledError
 from .log import init_log, logger
 from app.screen import Main
 
-__versions__ = "0.4.1"
+__versions__ = "0.4.2"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":

@@ -19,7 +19,7 @@ from ..log import logger
 from .. import account_manager
 from ..account_manager import Account
 from ..virtual_device import create_virtual_device
-from ..api.client import Client
+from ..client import Client
 
 
 class AccountScreen:
