@@ -141,7 +141,7 @@ jobs:
 
     - name: Build macOS App
       run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --hidden-import bili_ticket_gt_python --add-data "app;app" run.py
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --hidden-import bili_ticket_gt_python --add-data="app:app" run.py
         chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
     - name: Upload macOS Artifact
