@@ -8,8 +8,8 @@
 _app_old/
 app/.DS_Store
 config/
-
-./account/
+account/
+push_config/
 c.js
 
 i.js

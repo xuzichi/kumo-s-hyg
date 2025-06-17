@@ -15,6 +15,7 @@ import hashlib
 import uuid
 import struct
 import re
+import urllib.parse
 
 from app.virtual_device import create_virtual_device
 
@@ -67,6 +68,9 @@ class createStatusJson:
 class ProjectInfoByDateJson:
     pass
 
+@dataclass
+class SearchProjectJson:
+    pass
 
 
 class Client:
@@ -80,6 +84,7 @@ class Client:
         self.gaia_handler = GaiaHandler(self)
         self.cookie = None
         self.device = None
+        self.buvid: str | None = None  # buvid1
         
         # 基础请求头，稍后会根据用户配置进行更新
         self.headers = {
@@ -94,6 +99,8 @@ class Client:
         
         self.ptoken: Optional[str] = None
         self.ctoken: Optional[str] = None
+        # 提供可静态分析的 api 入口
+        self.api = Client.API(self)
     
     def load_cookie(self, cookie: str) -> None:
         """
@@ -113,11 +120,15 @@ class Client:
             # 动态更新请求头
             enhanced_headers = headers.copy()
             
+            # 自动附带 x-risk-header（若已生成）
+            if hasattr(self, "x_risk_header") and self.x_risk_header:
+                enhanced_headers.setdefault("x-risk-header", self.x_risk_header)
+            
             # 添加设备信息头（如果设备指纹可用）
             if hasattr(self, 'device_fingerprint'):
                 device_info = {
                     "platform": "ios",
-                    "version": "8.48.0",
+                    "version": getattr(self.device_fingerprint, "bili_app_version", "8.48.0"),
                     "device_type": self.device_fingerprint.model,
                     "network": "wifi",
                     "device_id": self.device_fingerprint.device_id,
@@ -262,13 +273,9 @@ class Client:
             f"&requestSource={request_source}"
         )
         mobile_headers = self.headers.copy()
-        logger.debug(f"Confirm请求，携带正确ptoken: {real_ptoken}")
         return self._make_api_call('GET', url, mobile_headers)
 
     def prepare(self,  project_id, count, screen_id, sku_id) -> "prepareJson":
-        """
-        prepare请求，携带正确的ctoken
-        """
         url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
         
         # 从设备指纹获取分辨率
@@ -314,10 +321,7 @@ class Client:
             
         return result
 
-    def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":
-        """
-        create请求，携带正确的ctoken和ptoken
-        """                
+    def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":             
         # 优先使用显式传入，其次使用已保存的 ptoken
         real_ptoken = ptoken or self.ptoken
         
@@ -344,7 +348,7 @@ class Client:
                 outer_height=height,
                 screen_width=width,
             ),
-            "version": "1.1.0"
+            "version": getattr(self.device_fingerprint, "bili_app_version", "8.48.0"),
         }
         logger.debug(f"CREATE: {json.dumps(payload, indent=4)}")
         
@@ -406,6 +410,22 @@ class Client:
         mobile_headers = self.headers.copy()
         return self._make_api_call('GET', url, mobile_headers)
 
+    def search_project(self, keyword: str, page: int = 1, pagesize: int = 16) -> "SearchProjectJson":
+        """
+        根据关键词搜索演出项目
+        
+        参数:
+        -----
+        keyword : str
+            搜索关键词
+        page : int
+            页码，默认为1
+        pagesize : int
+            每页数量，默认为16
+        """
+        url = f"https://show.bilibili.com/api/ticket/search/list?version=134&keyword={urllib.parse.quote(keyword)}&pagesize={pagesize}&page={page}&platform=web"
+        mobile_headers = self.headers.copy()
+        return self._make_api_call('GET', url, mobile_headers)
 
     def logout(self):
         """登出当前账号"""
@@ -557,10 +577,100 @@ class Client:
         })
         logger.debug(f"已绑定虚拟设备: {device.device_name} (ID: {device.device_id[:8]}...)")
 
-    @property
-    def api(self):
-        """返回自身, 以支持 `client.api.xxx` 链式调用写法."""
-        return self
+        def _update_cookie(key: str, value: str):
+            if not value:
+                return
+            cookie_str = self.headers.get("Cookie", "") or ""
+            items = [c.strip() for c in cookie_str.split(";") if c.strip() and not c.strip().startswith(f"{key}=")]
+            items.append(f"{key}={value}")
+            self.headers["Cookie"] = "; ".join(items)
 
-# 向后兼容: 保留旧类名 Api 以避免大规模替换
+        if getattr(self, "buvid", None):
+            return
+        rnd = hashlib.md5(str(random.random()).encode()).hexdigest()
+        # 生成 buvid1
+        buvid1 = f"XU{rnd[2]}{rnd[12]}{rnd[22]}{rnd}".upper()
+        self.buvid = buvid1
+        
+        # 生成 buvid_fp
+        rnd2 = hashlib.md5(str(random.random()).encode()).hexdigest()
+        fp_raw = rnd2 + time.strftime("%Y%m%d%H%M%S", time.localtime()) + "".join(random.choice("0123456789abcdef") for _ in range(16))
+        fp_raw_sub = [fp_raw[i:i+2] for i in range(0, len(fp_raw), 2)]
+        veri = sum(int(x,16) for x in fp_raw_sub[::2]) % 256
+        buvid_fp = f"{fp_raw}{hex(veri)[2:]}"
+        
+        # 获取 buvid3 / buvid4
+        buvid3 = buvid4 = ""
+        try:
+            r = requests.get("https://api.bilibili.com/x/frontend/finger/spi", headers={"User-Agent": self.headers["User-Agent"]}, timeout=10)
+            if r.status_code == 200:
+                jd = r.json().get("data", {})
+                buvid3 = jd.get("b_3", "")
+                buvid4 = jd.get("b_4", "")
+        except Exception as e:
+            logger.debug(f"finger/spi 失败: {e}")
+            
+        # 生成 _uuid
+        _uuid = f"{uuid.uuid4()}{str(int(time.time()*1000)%100000).ljust(5,'0')}infoc"
+        for k,v in ("buvid",buvid1), ("buvid3",buvid3), ("buvid4",buvid4), ("buvid_fp",buvid_fp), ("_uuid",_uuid):
+            _update_cookie(k,v)
+            
+        # 整合 buvid 和 risk header
+        identify = hashlib.md5(str(int(time.time()*1000)).encode()).hexdigest()
+        parts = [
+            "appkey/1d8b6e7d45233436",
+            "brand/Apple",
+            f"localBuvid/{self.buvid}",
+            "mVersion/296",
+            f"mallVersion/{device.bili_app_build}",
+            f"model/{device.model}",
+            f"osver/{device.ios_version.split('.')[0]}",
+            "platform/h5",
+            "uid/0",
+            "channel/1",
+            f"deviceId/{self.buvid}",
+            "sLocale/zh_CN",
+            "cLocale/zh_CN",
+            f"identify/{identify}"
+        ]
+        self.x_risk_header = " ".join(parts)
+
+        logger.debug(f"已生成 x-risk-header: {self.x_risk_header}")
+
+    # --------- 嵌套 API 包装 ---------
+    class API:
+        """静态内部 API 包装，供 IDE 静态分析"""
+        def __init__(self, outer: "Client"):
+            self._o = outer
+        def project(self, *args, **kwargs):
+            return self._o.project(*args, **kwargs)
+        def buyer(self, *args, **kwargs):
+            return self._o.buyer(*args, **kwargs)
+        def address(self, *args, **kwargs):
+            return self._o.address(*args, **kwargs)
+        def confirm(self, *args, **kwargs):
+            return self._o.confirm(*args, **kwargs)
+        def prepare(self, *args, **kwargs):
+            return self._o.prepare(*args, **kwargs)
+        def create(self, *args, **kwargs):
+            return self._o.create(*args, **kwargs)
+        def my_info(self, *args, **kwargs):
+            return self._o.my_info(*args, **kwargs)
+        def create_status(self, *args, **kwargs):
+            return self._o.create_status(*args, **kwargs)
+        def project_info_by_date(self, *args, **kwargs):
+            return self._o.project_info_by_date(*args, **kwargs)
+        def qr_login(self, *args, **kwargs):
+            return self._o.qr_login(*args, **kwargs)
+        def search_project(self, *args, **kwargs):
+            return self._o.search_project(*args, **kwargs)
+
+    # 保留 api 属性实例（__init__ 中赋值）
+
+
+# 向后兼容: 保留旧类名 Api
 Api = Client
+
+
+
+

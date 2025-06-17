@@ -135,31 +135,78 @@ class ConfigBuilder:
     def _get_project_info(self, default_project_id=None):
         """获取项目信息"""
         while True:
-            logger.opt(colors=True).info("接下来, 请在演出的链接中找数字ID, 例如 <green>https://show.bilibili.com/platform/detail.html?id=98594</green>, 的ID为 <green>98594</green>.")
+            logger.opt(colors=True).info("接下来, 请输入项目ID或搜索关键词, 例如 <green>98594</green> 或 <green>BML</green>")
             if default_project_id:
-                project_id = InputPrompt("请输入项目ID:", default_text=str(default_project_id)).prompt()
+                project_input = InputPrompt("请输入项目ID或搜索关键词:", default_text=str(default_project_id)).prompt()
             else:
-                project_id = InputPrompt("请输入项目ID:",).prompt()
-            if not project_id.isdigit():
-                logger.error("项目ID必须为数字")
-                continue
-            logger.info('配置文件生成中...')
-            break
-        
-        project_json = self.api.project(project_id=project_id)
-        logger.debug(project_json)
-        try:
-            logger.opt(colors=True).info(f'项目信息: {project_json["data"]["name"]} {project_json["data"]["sale_flag"]}')
-        except Exception as e:
-            logger.error(f"获取项目信息失败, 请检查项目ID是否正确")
-            return None
-        
-        # 检查项目状态
-        if not project_json['data']['screen_list']:
-            logger.error("该项目暂无可用场次")
-            return None
+                project_input = InputPrompt("请输入项目ID或搜索关键词:").prompt()
             
-        return project_json
+            # 判断输入是否为纯数字（项目ID）
+            if project_input.isdigit():
+                project_id = project_input
+                logger.info('配置文件生成中...')
+                project_json = self.api.project(project_id=project_id)
+            else:
+                # 作为关键词搜索
+                logger.info(f'正在搜索关键词: {project_input}...')
+                search_result = self.api.search_project(keyword=project_input)
+                # logger.debug(search_result)
+                
+                # 修复判断条件，正确检查搜索结果
+                if search_result.get('errno') != 0 or not search_result.get('data', {}).get('result'):
+                    logger.error(f"搜索失败或未找到结果，请检查关键词或直接输入项目ID")
+                    continue
+                
+                # 构建选择列表
+                project_choices = []
+                for item in search_result['data']['result']:
+                    # 格式化价格显示，将分转为元
+                    price_info = ""
+                    if item.get('price_low') and item.get('price_high'):
+                        price_low = item['price_low'] / 100
+                        price_high = item['price_high'] / 100
+                        price_info = f" ¥{price_low}-{price_high}"
+                    
+                    # 格式化日期显示
+                    date_info = f" {item.get('start_time', '')} - {item.get('end_time', '')}"
+                    
+                    # 构建选项文本
+                    choice_text = f"{item['title']}{date_info}{price_info} [{item['sale_flag']}]"
+                    project_choices.append(Choice(choice_text, data=str(item['id'])))
+                
+                if not project_choices:
+                    logger.error("未找到相关演出，请尝试其他关键词或直接输入项目ID")
+                    continue
+                
+                # 添加一个重新搜索的选项
+                project_choices.append(Choice("重新搜索", data="search_again"))
+                
+                # 显示选择列表
+                selected_project = ListPrompt(
+                    "请选择一个演出项目:",
+                    choices=project_choices
+                ).prompt()
+                
+                if selected_project.data == "search_again":
+                    continue
+                
+                project_id = selected_project.data
+                logger.info('配置文件生成中...')
+                project_json = self.api.project(project_id=project_id)
+            
+            logger.debug(project_json)
+            try:
+                logger.opt(colors=True).info(f'项目信息: {project_json["data"]["name"]} {project_json["data"]["sale_flag"]}')
+            except Exception as e:
+                logger.error(f"获取项目信息失败, 请检查项目ID是否正确")
+                return None
+            
+            # 检查项目状态
+            if not project_json['data']['screen_list']:
+                logger.error("该项目暂无可用场次")
+                return None
+                
+            return project_json
 
     def _build_config_content(self, project_json):
         """构建配置文件内容"""

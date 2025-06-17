@@ -18,14 +18,14 @@ from noneprompt import (
 from app.logic import Logic
 from app.order import Order
 from ..log import logger
-from ..api import Client
+from ..api import client
 from .config_builder import ConfigBuilder
 from app import account_manager
 
 
 class ConfigExecutor:
-    def __init__(self, api: Client):
-        self.api = api
+    def __init__(self, client: client):
+        self.client = client
 
     def show_config_menu(self, config_path: Path):
         """展示针对单个配置文件的操作选单"""
@@ -175,9 +175,9 @@ class ConfigExecutor:
                     logger.error("配置文件中未找到有效 account_id, 或对应账号不存在")
                     return
                 # 绑定 Cookie 与设备
-                self.api.load_cookie(account.cookie)
-                self.api.set_device(account.device)
-                my_info_json = self.api.my_info()
+                self.client.load_cookie(account.cookie)
+                self.client.set_device(account.device)
+                my_info_json = self.client.api.my_info()
                 if my_info_json["code"] == -101:
                     logger.error("cookie已失效, 请重新登录.")
                     return
@@ -187,7 +187,7 @@ class ConfigExecutor:
                 user_name = account.username if account else "未知用户"
 
                 # 获取项目详细信息
-                project_json = self.api.project(project_id=config["project_id"])
+                project_json = self.client.api.project(project_id=config["project_id"])
 
                 # 打印配置摘要信息
                 logger.opt(colors=True).info("─" * 50)
@@ -216,7 +216,7 @@ class ConfigExecutor:
 
                 # 打印地址信息（如果有）
                 if "address_index" in config and config["address_index"]:
-                    address_json = self.api.address()
+                    address_json = self.client.api.address()
                     for addr_idx in config["address_index"]:
                         if addr_idx < len(address_json["data"]["addr_list"]):
                             addr = address_json["data"]["addr_list"][addr_idx]
@@ -231,7 +231,7 @@ class ConfigExecutor:
 
                 # 打印购票人信息（如果有）
                 if "buyer_index" in config and config["buyer_index"]:
-                    buyer_json = self.api.buyer()
+                    buyer_json = self.client.api.buyer()
                     for buyer_idx in config["buyer_index"]:
                         if buyer_idx < len(buyer_json["data"]["list"]):
                             buyer = buyer_json["data"]["list"][buyer_idx]

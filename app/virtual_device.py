@@ -10,6 +10,12 @@ import hashlib
 import random
 from dataclasses import dataclass, asdict, field
 
+# 新增依赖，用于拉取最新 B 站 iOS 版本
+import requests
+
+# 项目内部日志
+from .log import logger
+
 
 @dataclass
 class VirtualDevice:
@@ -27,6 +33,8 @@ class VirtualDevice:
     resolution: str
     fe_sign: str
     user_agent: str
+    bili_app_version: str = "8.48.0"  # 新增: BiliApp 版本号, 默认 8.48.0
+    bili_app_build: str = "84800100"    # 新增: BiliApp build 码, 默认 84800100
     created_time: int = field(default_factory=lambda: int(time.time()))
 
 
@@ -184,16 +192,49 @@ def create_virtual_device() -> VirtualDevice:
         
         return ios_version, webkit_version
     
+    # -----------------------------
+    #  拉取 BiliApp 最新版本号 (iOS)
+    # -----------------------------
+    def fetch_latest_ios_biliapp_version() -> tuple[str, str]:
+        """访问官方接口获取最新 iOS 端 BiliApp build 与版本号。
+
+        Returns
+        -------
+        (build, version_name)
+            build 如 "84800100"，version_name 如 "8.48.0"。
+            若获取失败则返回默认值 ("84800100", "8.48.0")。
+        """
+        try:
+            resp = requests.get(
+                "https://app.bilibili.com/x/v2/version",
+                params={"mobi_app": "iphone"},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data_json = resp.json()
+            build = str(data_json["data"][0]["build"])
+            version_name = str(data_json["data"][0]["version"])
+            return build, version_name
+        except Exception as e:
+            logger.warning(f"获取最新 iOS 端 BiliApp 版本失败: {e}; 使用默认 8.48.0")
+            return "84800100", "8.48.0"
+    
     # 生成所有指纹信息
     ios_version, webkit_version = generate_version_info()
     additional_fps = generate_additional_fingerprints()
     device_id = generate_device_id()
     
-    # 生成User-Agent
-    ua = (f"Mozilla/5.0 (iPhone; CPU iPhone OS {ios_version.replace('.', '_')} like Mac OS X) "
-          f"AppleWebKit/{webkit_version} (KHTML, like Gecko) Mobile/22F76 BiliApp/84800100 "
-          f"os/ios model/{device_model} mobi_app/iphone build/84800100 osVer/{ios_version} "
-          f"network/wifi channel/AppStore")
+    # 最新 BiliApp 版本
+    bili_build, bili_version = fetch_latest_ios_biliapp_version()
+    
+    # 生成User-Agent，动态填入版本信息
+    ua = (
+        f"Mozilla/5.0 (iPhone; CPU iPhone OS {ios_version.replace('.', '_')} like Mac OS X) "
+        f"AppleWebKit/{webkit_version} (KHTML, like Gecko) Mobile/22F76 "
+        f"BiliApp/{bili_build} os/ios model/{device_model} mobi_app/iphone build/{bili_build} "
+        f"osVer/{ios_version} network/wifi channel/AppStore"
+    )
     
     # 生成设备名称 - 格式：iPhone15_iOS18.1_KW9N
     device_name = f"{device_model}_iOS{ios_version}_{device_id[:4]}"
@@ -211,5 +252,7 @@ def create_virtual_device() -> VirtualDevice:
         screen_fp=additional_fps['screen_fp'],
         resolution=additional_fps['resolution'],
         fe_sign=hashlib.sha256(f"{device_model}:{ios_version}:{time.time()}".encode()).hexdigest()[:32],
-        user_agent=ua
+        user_agent=ua,
+        bili_app_version=bili_version,
+        bili_app_build=bili_build
     )

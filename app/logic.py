@@ -27,7 +27,7 @@ import yaml
 from .order import Order
 from .api import Client
 from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
-
+from .push_manager import push_manager
 
 # 错误码处理增强
 ERROR_HANDLERS = {
@@ -96,9 +96,11 @@ class Logic():
                         logger.warning(f"下单成功, 正在判断是否为假票...")
                         pay_token = res["data"]["token"]
                         order_id = res["data"]["orderId"] if "orderId" in res["data"] else None
-                        create_status = self.order.api.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
+                        create_status = self.order.client.api.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
                         if create_status["errno"] == 0:
                             logger.success('购票成功! 请尽快打开订单界面支付!')
+                            # 推送
+                            push_manager.send(title="[khyg] 购票成功", content=f"请在10分钟内打开订单界面支付!")
                             break
                         else:
                             logger.error(f"假票, 请重新下单.")
@@ -125,6 +127,7 @@ class Logic():
                         continue
                     elif error_code in [100003, 100079, 100016, 100039, 100048]:
                         logger.warning(f"{error_msg}")
+                        push_manager.send(title="[khyg] 购票失败", content=f"{error_msg}")
                         break  # 项目相关错误，直接退出
                     
                     elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -401, -509, -799]:
