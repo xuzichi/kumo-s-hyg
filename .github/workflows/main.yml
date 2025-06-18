@@ -163,21 +163,17 @@ jobs:
     - name: Define Release Variables
       id: release_vars
       run: |
-        # 从 build-macos 作业获取版本号 (假设两个构建作业的版本号是一致的)
-        # 如果两个构建作业的版本号可能不同（理论上不应该），你需要决定用哪个或如何处理差异
-        echo "RELEASE_VERSION=${{ needs.build-macos.outputs.version }}"
-        echo "Using version for release: ${{ needs.build-macos.outputs.version }}"
+        # 从 build-windows 作业获取版本号
+        echo "RELEASE_VERSION=${{ needs.build-windows.outputs.version }}"
+        echo "Using version for release: ${{ needs.build-windows.outputs.version }}"
 
-        # 从各自的构建作业输出中获取确切的文件名
+        # 从 Windows 构建作业输出中获取确切的文件名
         WINDOWS_FILENAME="${{ needs.build-windows.outputs.output_name }}.exe"
-        MACOS_FILENAME="${{ needs.build-macos.outputs.output_name }}"
         
         echo "WINDOWS_FILENAME_ENV=$WINDOWS_FILENAME" >> $GITHUB_ENV
-        echo "MACOS_FILENAME_ENV=$MACOS_FILENAME" >> $GITHUB_ENV
         
-        # 也设置为步骤输出，方便后续直接引用 (或者直接用 GITHUB_ENV)
+        # 也设置为步骤输出，方便后续直接引用
         echo "final_windows_filename=$WINDOWS_FILENAME" >> $GITHUB_OUTPUT
-        echo "final_macos_filename=$MACOS_FILENAME" >> $GITHUB_OUTPUT
 
 
     - name: Download Windows Artifact
@@ -187,13 +183,6 @@ jobs:
         name: windows-executable-${{ needs.build-windows.outputs.version }}
         path: artifacts # 将所有构建产物下载到通用目录
 
-    - name: Download macOS Artifact
-      uses: actions/download-artifact@v4
-      with:
-        # 使用 build-macos 作业输出的版本号来匹配正确的构建产物名称
-        name: macos-executable-${{ needs.build-macos.outputs.version }}
-        path: artifacts
-
     - name: Verify Downloaded Artifacts
       run: |
         echo "Checking for Windows artifact: artifacts/${{ steps.release_vars.outputs.final_windows_filename }}"
@@ -202,27 +191,22 @@ jobs:
           echo "::error::Windows artifact not found after download! Expected: artifacts/${{ steps.release_vars.outputs.final_windows_filename }}"
           exit 1
         fi
-        echo "Checking for macOS artifact: artifacts/${{ steps.release_vars.outputs.final_macos_filename }}"
-        if [ ! -f "artifacts/${{ steps.release_vars.outputs.final_macos_filename }}" ]; then
-          echo "::error::macOS artifact not found after download! Expected: artifacts/${{ steps.release_vars.outputs.final_macos_filename }}"
-          exit 1
-        fi
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v${{ needs.build-macos.outputs.version }} # 使用来自 build-macos 的版本
-        name: Release v${{ needs.build-macos.outputs.version }}
+        tag_name: v${{ needs.build-windows.outputs.version }} # 使用来自 build-windows 的版本
+        name: Release v${{ needs.build-windows.outputs.version }}
         body: |
-          Automated release for version ${{ needs.build-macos.outputs.version }}.
+          Automated release for version ${{ needs.build-windows.outputs.version }}.
 
           **Downloads:**
           * Windows: `${{ steps.release_vars.outputs.final_windows_filename }}`
-          * macOS: `${{ steps.release_vars.outputs.final_macos_filename }}`
+          
+          macOS 版本因兼容性原因暂时停止构建。
         draft: false
         prerelease: false
         files: |
           artifacts/${{ steps.release_vars.outputs.final_windows_filename }}
-          artifacts/${{ steps.release_vars.outputs.final_macos_filename }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
