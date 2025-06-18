@@ -22,12 +22,12 @@ from noneprompt import (
     CancelledError
 )
 
-from .log import logger
+from .utils.log import logger
 import yaml
 from .order import Order
 from .client import Client
 from .client import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
-from .push_manager import push_manager
+from .utils.push_manager import push_manager
 
 # 错误码处理增强
 ERROR_HANDLERS = {
@@ -48,6 +48,7 @@ ERROR_HANDLERS = {
     100034: "票价错误，自动更新",
     100039: "活动收摊啦，下次要快点哦",
     100041: "对未发售的票进行抢票",
+    100044: "触发验证码，正在自动处理",
     100048: "已经下单，有尚未完成订单",
     100050: "当前页面已失效，请返回详情页重新下单",
     100051: "订单准备过期，重新验证",
@@ -112,7 +113,27 @@ class Logic():
                     else:
                         error_msg = f"未知错误码: {error_code}"
                     
-                    if error_code == 412:
+                    if error_code == 100044:
+                        # 验证码处理逻辑
+                        logger.warning(f"{error_msg}")
+                        
+                        # 检查是否有验证码信息
+                        if "ga_data" in res.get("data", {}):
+                            logger.info("检测到验证码，尝试自动处理...")
+                            risk_params = res["data"]["ga_data"]["riskParams"]
+                            if self.order.client.gaia_handler.handle_validation(risk_params):
+                                logger.success("验证码处理成功，重新下单")
+                                # 重新prepare和confirm以获取新token
+                                self.order.prepare()
+                                self.order.confirm()
+                                order_attempt = 0  # 重置计数器
+                                continue
+                            else:
+                                logger.error("验证码处理失败")
+                                time.sleep(0.9)  # 等待一段时间后重试
+                                continue
+                                
+                    elif error_code == 412:
                         logger.error(f"{error_msg} - 可能触发了风控机制")
                         logger.info(f"等待 30 秒后重试...")
                         time.sleep(30)
@@ -130,7 +151,7 @@ class Logic():
                         push_manager.send(title="[khyg] 购票失败", content=f"{error_msg}")
                         break  # 项目相关错误，直接退出
                     
-                    elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -401, -509, -799]:
+                    elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -509, -799]:
                         if error_code == 3: # 身份证盾中，等待4.96秒后重试
                             logger.info(error_msg)
                             time.sleep(4.96)
@@ -139,6 +160,22 @@ class Logic():
                             logger.info(f"{error_msg}")
                             
                         continue
+                    # elif error_code == -401:
+                    #     logger.warning(f"{error_msg} - 可能触发了风控验证")
+                    #     logger.info("尝试刷新bili_ticket以降低风控概率...")
+                        
+                    #     # 尝试刷新bili_ticket并强制更新
+                    #     try:
+                    #         self.order.client.ensure_bili_ticket(force_refresh=True)
+                    #         logger.info("bili_ticket刷新成功，重试中...")
+                    #     except Exception as e:
+                    #         logger.warning(f"刷新bili_ticket失败: {e}")
+                            
+                    #     # 等待一段时间后重试
+                    #     logger.info(f"等待 20 秒后重试...")
+                    #     time.sleep(20)
+                    #     order_attempt = 0  # 重置计数器
+                    #     continue
                     else:
                         # 未知错误或不可重试错误
                         logger.error(error_msg)
@@ -150,7 +187,7 @@ class Logic():
                 except Exception as e:
                     logger.error(f"发生错误: {e}")
                     logger.debug(traceback.format_exc())
-                    time.sleep(1)
+                    time.sleep(1.2)
                     order_attempt = 0  # 重置计数器，因为已经等待了1秒
                     
         except CancelledError:

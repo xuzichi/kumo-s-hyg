@@ -20,7 +20,7 @@ from noneprompt import (
     CancelledError
 )
 
-from .log import logger
+from .utils.log import logger
 import yaml
 
 from .client import Client
@@ -74,6 +74,9 @@ class Order:
         - 构建地址信息 (纸质票)
         - 构建票种信息 main
         '''
+        
+        # 确保bili_ticket有效，降低风控概率
+        self.client.ensure_bili_ticket()
         
         project_json = self.client.api.project(project_id=self.project_id)
         screen_idx, ticket_idx = config['screen_ticket'][0]

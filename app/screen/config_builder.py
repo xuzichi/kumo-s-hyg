@@ -18,12 +18,12 @@ from noneprompt import (
     ConfirmPrompt,
 )
 
-from ..log import logger
+from ..utils.log import logger
 from ..client import Client
 
 # 新增：账号管理
 from .account_screen import AccountScreen
-from app import account_manager as am
+from app.utils import account_manager as am
 
 
 class ConfigBuilder:

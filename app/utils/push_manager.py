@@ -6,7 +6,7 @@ from typing import List, Optional, Union
 
 import requests
 
-from app.log import logger
+from app.utils.log import logger
 
 PUSH_CONFIG_DIR = Path("push_config")
 PUSH_CONFIG_DIR.mkdir(exist_ok=True)

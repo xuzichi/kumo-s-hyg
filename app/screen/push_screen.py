@@ -1,4 +1,4 @@
-from ..log import logger
+from ..utils.log import logger
 from noneprompt import (
     ListPrompt,
     Choice,
@@ -6,7 +6,7 @@ from noneprompt import (
     InputPrompt,
 )
 
-from app.push_manager import push_manager, PushplusConfig, BarkConfig
+from app.utils.push_manager import push_manager, PushplusConfig, BarkConfig
 
 
 class PushScreen:

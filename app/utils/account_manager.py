@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict, field
 import traceback
 import re
 import string
-from app.virtual_device import VirtualDevice, Account
+from app.utils.virtual_device import VirtualDevice, Account
 
 # 避免运行时循环依赖，仅在类型检查时导入 Api
 if TYPE_CHECKING:

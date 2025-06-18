@@ -1,6 +1,6 @@
 .venv/
 .log/
-.models/*
+models/*
 .device_configs/*
 
 .DS_Store
@@ -12,7 +12,9 @@ account/
 push_config/
 c.js
 i.js
-
+bb1/
+bb2/
+bilibili-API-collect-master/
 
 
 # Byte-compiled / optimized / DLL files

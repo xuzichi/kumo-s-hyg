@@ -17,10 +17,10 @@ from noneprompt import (
 
 from app.logic import Logic
 from app.order import Order
-from ..log import logger
+from ..utils.log import logger
 from ..client import Client
 from .config_builder import ConfigBuilder
-from app import account_manager
+from app.utils import account_manager
 from .config_executor import ConfigExecutor
 from .push_screen import PushScreen
 

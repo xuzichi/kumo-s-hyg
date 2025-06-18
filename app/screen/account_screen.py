@@ -15,10 +15,10 @@ from noneprompt import (
     ConfirmPrompt,
 )
 
-from ..log import logger
-from .. import account_manager
-from ..account_manager import Account
-from ..virtual_device import create_virtual_device
+from ..utils.log import logger
+from ..utils import account_manager
+from ..utils.account_manager import Account
+from ..utils.virtual_device import create_virtual_device
 from ..client import Client
 
 
@@ -128,6 +128,12 @@ class AccountScreen:
 
             # 将 Cookie 写入 Api
             self.api.load_cookie(cookie)
+            
+            # 登录成功后获取bili_ticket以降低风控概率
+            try:
+                self.api.get_bili_ticket()
+            except Exception as e:
+                logger.warning(f"获取bili_ticket失败，但不影响账号设置: {e}")
 
             # 创建并保存账号
             account = account_manager.create_account(self.api)

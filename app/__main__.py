@@ -2,10 +2,12 @@ import sys
 import os    
 
 from noneprompt import CancelledError
-from .log import init_log, logger
+from .utils.log import init_log, logger
 from app.screen import Main
+from .client import Client
+from .gaia import GaiaCaptchaManager
 
-__versions__ = "0.4.3"
+__versions__ = "0.5.1"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -31,6 +33,9 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         
     try:
         logger.opt(colors=True).info(f'We1c0me <green>khyg</green> v{__versions__}')
+        # 如果没有 models 文件夹，提示用户等待初始化模型
+        if not os.path.exists("models"):
+            logger.warning("验证码模型初始化中...")
         
         Main().run()
     except CancelledError:
@@ -39,5 +44,6 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         logger.info("program exit.")
     except Exception as e:
         logger.error(f"程序发生异常：{e}")
+        logger.debug("异常详情:", exc_info=True)
         
     

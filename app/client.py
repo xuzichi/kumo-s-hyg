@@ -16,15 +16,16 @@ import uuid
 import struct
 import re
 import urllib.parse
+import hmac
 
-from app.virtual_device import create_virtual_device
+from app.utils.virtual_device import create_virtual_device
 
-from .log import logger
-from .gaia import GaiaHandler
+from .utils.log import logger
+from .gaia import GaiaCaptchaManager
 import yaml
 
 if TYPE_CHECKING:
-    from .account_manager import VirtualDevice
+    from .utils.account_manager import VirtualDevice
 
 
 @dataclass
@@ -81,10 +82,25 @@ class Client:
     """
 
     def __init__(self) -> None:
-        self.gaia_handler = GaiaHandler(self)
+        self.gaia_handler = GaiaCaptchaManager(self)
         self.cookie = None
         self.device = None
         self.buvid: str | None = None  # buvid1
+        
+        # 添加WBI相关字段
+        self.wbi_img_key = None
+        self.wbi_sub_key = None
+        self.bili_ticket_last_refresh = 0  # 上次刷新bili_ticket的时间戳
+        self.bili_ticket = None  # 保存bili_ticket的值
+        
+        # 尝试导入bili_ticket_gt_python
+        try:
+            import bili_ticket_gt_python
+            self.click = bili_ticket_gt_python.ClickPy()
+            # logger.info("bili_ticket_gt_python 加载成功")
+        except ImportError:
+            logger.warning("bili_ticket_gt_python 未安装，部分验证码功能将不可用")
+            self.click = None
         
         # 基础请求头，稍后会根据用户配置进行更新
         self.headers = {
@@ -163,13 +179,33 @@ class Client:
             if result.get("code") == -401 and "ga_data" in result.get("data", {}):
                 logger.warning("检测到风控验证，尝试自动处理...")
                 risk_params = result["data"]["ga_data"]["riskParams"]
-                if self.gaia_handler.handle_gaia_validation(risk_params):
+                if self.gaia_handler.handle_validation(risk_params):
                     logger.success("风控验证通过，重新请求...")
                     # 重新发起请求
                     return self._make_api_call(method, url, headers, json_data, params, timeout)
                 else:
                     logger.error("风控验证失败")
             
+            # 检查是否触发简单风控 (code=-352 且有v_voucher)
+            elif result.get("code") == -352 and "data" in result and "v_voucher" in result.get("data", {}):
+                logger.warning(f"检测到简单风控验证，v_voucher: {result['data']['v_voucher']}")
+                if self.gaia_handler.handle_validation(result["data"]["v_voucher"]):
+                    logger.success("简单风控验证通过，重新请求...")
+                    # 重新发起请求
+                    return self._make_api_call(method, url, headers, json_data, params, timeout)
+                else:
+                    logger.error("简单风控验证失败")
+            
+            # 检查响应头中是否有风控验证信息
+            elif result.get("code") == -352 and response.headers.get("x-bili-gaia-vvoucher"):
+                v_voucher = response.headers.get("x-bili-gaia-vvoucher")
+                logger.warning(f"检测到头部风控验证，x-bili-gaia-vvoucher: {v_voucher}")
+                if self.gaia_handler.handle_validation(v_voucher):
+                    logger.success("头部风控验证通过，重新请求...")
+                    # 重新发起请求
+                    return self._make_api_call(method, url, headers, json_data, params, timeout)
+                else:
+                    logger.error("头部风控验证失败")
             
             return result
             
@@ -278,6 +314,9 @@ class Client:
     def prepare(self,  project_id, count, screen_id, sku_id) -> "prepareJson":
         url = f"https://show.bilibili.com/api/ticket/order/prepare?project_id={project_id}"
         
+        # 刷新bili_ticket以降低风控概率
+        self.ensure_bili_ticket()
+        
         # 从设备指纹获取分辨率
         res = self.device_fingerprint.resolution
         width, height = map(int, res.split('x'))
@@ -324,6 +363,9 @@ class Client:
     def create(self, project_id, token, screen_id, sku_id, count, pay_money, buyer_info, ptoken="", deliver_info=None, buyer=None, tel=None) -> "createJson":             
         # 优先使用显式传入，其次使用已保存的 ptoken
         real_ptoken = ptoken or self.ptoken
+        
+        # 刷新bili_ticket以降低风控概率
+        self.ensure_bili_ticket()
         
         # 从设备指纹获取分辨率
         res = self.device_fingerprint.resolution
@@ -449,6 +491,173 @@ class Client:
         }
         return self._make_api_call('POST', url, mobile_headers, json_data=data)
 
+    def get_bili_ticket(self):
+        """获取bili_ticket降低风控概率
+        
+        根据官方文档实现：
+        1. 获取时间戳
+        2. 使用hmac_sha256计算hexsign
+        3. 请求GenWebTicket接口获取ticket
+        
+        返回:
+            str: 成功返回ticket值，失败返回None
+        """
+        # 1. 获取时间戳
+        timestamp = int(time.time())
+        
+        # 2. 计算hexsign，密钥为XgwSnGZ1p
+        hexsign = hmac.new(
+            "XgwSnGZ1p".encode('utf-8'), 
+            f"ts{timestamp}".encode('utf-8'), 
+            hashlib.sha256
+        ).hexdigest()
+        
+        # 3. 构造请求参数
+        url = "https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket"
+        params = {
+            "key_id": "ec02",
+            "hexsign": hexsign,
+            "context[ts]": str(timestamp),
+        }
+        
+        # 从cookie中提取bili_jct值
+        bili_jct = None
+        if self.cookie:
+            match = re.search(r'bili_jct=([^;]+)', self.cookie)
+            if match:
+                bili_jct = match.group(1)
+                params["csrf"] = bili_jct
+        
+        # 使用移动端请求头
+        mobile_headers = self.headers.copy()
+        mobile_headers["User-Agent"] = f"Mozilla/5.0 BiliApp/{self.device.bili_app_build} (iPhone; iOS {self.device.ios_version}; Scale/3.00)"
+        
+        try:
+            response = requests.post(url, params=params, headers=mobile_headers)
+            response.raise_for_status()
+            result = response.json()
+            
+            if result.get("code") == 0:
+                # 提取bili_ticket
+                bili_ticket = result["data"]["ticket"]
+                self.bili_ticket = bili_ticket
+                self.bili_ticket_last_refresh = timestamp
+                
+                # 提取WBI密钥
+                img_url = result["data"]["nav"]["img"]
+                sub_url = result["data"]["nav"]["sub"]
+                self.wbi_img_key = img_url.rsplit('/', 1)[1].split('.')[0]
+                self.wbi_sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
+                
+                # 更新cookie
+                if self.cookie:
+                    bili_ticket_expires = result["data"]["created_at"] + result["data"]["ttl"]
+                    if "bili_ticket=" in self.cookie:
+                        self.cookie = re.sub(r'bili_ticket=[^;]+', f'bili_ticket={bili_ticket}', self.cookie)
+                    else:
+                        self.cookie += f"; bili_ticket={bili_ticket}"
+                    
+                    if "bili_ticket_expires=" in self.cookie:
+                        self.cookie = re.sub(r'bili_ticket_expires=[^;]+', f'bili_ticket_expires={bili_ticket_expires}', self.cookie)
+                    else:
+                        self.cookie += f"; bili_ticket_expires={bili_ticket_expires}"
+                    
+                    # 更新headers中的cookie
+                    self.headers["Cookie"] = self.cookie
+                
+                return bili_ticket
+            else:
+                logger.error(f"获取bili_ticket失败: {result}")
+                return None
+        except Exception as e:
+            logger.error(f"获取bili_ticket异常: {e}")
+            return None
+
+    def ensure_bili_ticket(self, force_refresh=False):
+        """确保bili_ticket有效
+        
+        参数:
+            force_refresh (bool): 是否强制刷新，默认False
+            
+        返回:
+            str: 有效的bili_ticket或None
+        """
+        current_time = int(time.time())
+        ticket_ttl = 86400  # bili_ticket通常有效期为3天，这里保守设置1天刷新一次
+        
+        # 检查是否存在且未过期
+        bili_ticket = None
+        if self.cookie:
+            match = re.search(r'bili_ticket=([^;]+)', self.cookie)
+            if match:
+                bili_ticket = match.group(1)
+        
+        # 强制刷新或无ticket或已过期
+        if (force_refresh or 
+            not bili_ticket or 
+            current_time - self.bili_ticket_last_refresh > ticket_ttl):
+            new_ticket = self.get_bili_ticket()
+            if new_ticket:
+                return new_ticket
+        
+        return bili_ticket
+
+    def enc_wbi(self, params: dict):
+        """为请求参数进行WBI签名
+        
+        参数:
+            params (dict): 原始请求参数
+            
+        返回:
+            dict: 添加w_rid和wts字段后的参数
+        """
+        # 确保已获取WBI密钥
+        if not self.wbi_img_key or not self.wbi_sub_key:
+            # 尝试通过刷新bili_ticket获取WBI密钥
+            self.ensure_bili_ticket(True)
+            if not self.wbi_img_key or not self.wbi_sub_key:
+                logger.warning("无法获取WBI密钥，无法进行WBI签名")
+                return params
+        
+        # WBI签名算法实现
+        mixinKeyEncTab = [
+            46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+            33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+            61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+            36, 20, 34, 44, 52
+        ]
+        
+        def get_mixin_key(orig: str):
+            """对 imgKey 和 subKey 进行字符顺序打乱编码"""
+            return ''.join([orig[mixinKeyEncTab[i]] if i < len(orig) else '' for i in range(len(mixinKeyEncTab))])[:32]
+        
+        # 生成mixin_key
+        mixin_key = get_mixin_key(self.wbi_img_key + self.wbi_sub_key)
+        
+        # 添加 wts 字段
+        curr_time = int(time.time())
+        params = params.copy()  # 创建副本避免修改原始参数
+        params['wts'] = curr_time
+        
+        # 按照 key 重排参数并过滤特殊字符
+        params = dict(sorted(params.items()))
+        params = {
+            k : ''.join(filter(lambda chr: chr not in "!'()*", str(v)))
+            for k, v 
+            in params.items()
+        }
+        
+        # 序列化参数
+        query = urllib.parse.urlencode(params)
+        
+        # 计算 w_rid
+        w_rid = hashlib.md5((query + mixin_key).encode()).hexdigest()
+        
+        # 添加w_rid到参数
+        params['w_rid'] = w_rid
+        
+        return params
+
     def qr_login(self, timeout: int = 180) -> Optional[str]:
         """扫码登录，返回 Cookie 字符串。
 
@@ -535,6 +744,16 @@ class Client:
                         if not cookie_str:
                             cookie_str = "; ".join([f"{c.name}={c.value}" for c in session.cookies])
                         logger.success("登录成功！")
+                        
+                        # 加载cookie
+                        self.load_cookie(cookie_str)
+                        
+                        # 登录成功后获取bili_ticket增强安全性
+                        try:
+                            self.get_bili_ticket()
+                        except Exception as e:
+                            logger.warning(f"获取bili_ticket失败，但不影响登录: {e}")
+                        
                         return cookie_str
                     elif status_code == 86101:
                         # 等待扫码
@@ -561,7 +780,6 @@ class Client:
             logger.error(f"扫码登录异常: {e}")
             logger.debug(traceback.format_exc())
             return None
-
 
     def set_device(self, device: "VirtualDevice") -> None:
         """手动绑定虚拟设备到当前 Api 实例，并更新相关请求头。"""
@@ -637,7 +855,22 @@ class Client:
 
         logger.debug(f"已生成 x-risk-header: {self.x_risk_header}")
 
-    # --------- 嵌套 API 包装 ---------
+    def generate_click_position(self):
+        """生成随机点击位置，用于模拟真实用户点击
+        
+        返回:
+            dict: 包含点击位置信息的字典
+        """
+        import random
+        click_position = {
+            "x": random.randint(200, 400),
+            "y": random.randint(750, 800),
+            "origin": int(time.time() * 1000) - random.randint(100000, 200000),
+            "now": int(time.time() * 1000),
+        }
+        return click_position
+
+    # 嵌套 API 包装 
     class API:
         """静态内部 API 包装，供 IDE 静态分析"""
         def __init__(self, outer: "Client"):
@@ -664,12 +897,15 @@ class Client:
             return self._o.qr_login(*args, **kwargs)
         def search_project(self, *args, **kwargs):
             return self._o.search_project(*args, **kwargs)
+        def get_bili_ticket(self, *args, **kwargs):
+            return self._o.get_bili_ticket(*args, **kwargs)
+        def ensure_bili_ticket(self, *args, **kwargs):
+            return self._o.ensure_bili_ticket(*args, **kwargs)
+        def enc_wbi(self, *args, **kwargs):
+            return self._o.enc_wbi(*args, **kwargs)
+        def generate_click_position(self, *args, **kwargs):
+            return self._o.generate_click_position(*args, **kwargs)
 
-    # 保留 api 属性实例（__init__ 中赋值）
-
-
-# 向后兼容: 保留旧类名 Api
-Api = Client
 
 
 

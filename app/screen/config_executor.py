@@ -17,10 +17,10 @@ from noneprompt import (
 
 from app.logic import Logic
 from app.order import Order
-from ..log import logger
+from ..utils.log import logger
 from .. import client
 from .config_builder import ConfigBuilder
-from app import account_manager
+from app.utils import account_manager
 
 
 class ConfigExecutor:
@@ -177,6 +177,13 @@ class ConfigExecutor:
                 # 绑定 Cookie 与设备
                 self.client.load_cookie(account.cookie)
                 self.client.set_device(account.device)
+                
+                # 确保bili_ticket有效，降低风控概率
+                try:
+                    self.client.ensure_bili_ticket()
+                except Exception as e:
+                    logger.warning(f"更新bili_ticket失败: {e}, 但继续执行")
+                
                 my_info_json = self.client.api.my_info()
                 if my_info_json["code"] == -101:
                     logger.error("cookie已失效, 请重新登录.")

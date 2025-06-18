@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-"""
-账号管理模块 - 管理用户账号和虚拟设备
-"""
-
 import json
 import time
 import hashlib
