@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class Client:
     """对外暴露的客户端入口.
 
-    兼容设计: 为了支持 `client.api.xxx` 的调用方式, 这里提供一个 `api` 属性指向当前实例自身。
+    兼容设计: 为了支持 `client.client.xxx` 的调用方式, 这里提供一个 `client` 属性指向当前实例自身。
     这样既能保持方法路径层级清晰, 又不必大幅改动现有实现。
     """
 
@@ -63,8 +63,8 @@ class Client:
         
         self.ptoken: Optional[str] = None
         self.ctoken: Optional[str] = None
-        # 提供可静态分析的 api 入口
-        self.api = API(self)
+        # 提供可静态分析的 client 入口
+        self.client = API(self)
         
         # 尝试导入bili_ticket_gt_python
         try:

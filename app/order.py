@@ -75,10 +75,10 @@ class Order:
         - 构建票种信息 main
         '''
         
-        # 确保bili_ticket有效，降低风控概率
-        self.client.api.ensure_bili_ticket()
+        # 确保bili_ticket有效，减少风控概率
+        self.client.client.ensure_bili_ticket()
         
-        project_json = self.client.api.project(project_id=self.project_id)
+        project_json = self.client.client.project(project_id=self.project_id)
         screen_idx, ticket_idx = config['screen_ticket'][0]
 
         # 判断实名制类型
@@ -90,7 +90,7 @@ class Order:
             # 实名制项目，使用购票人信息
             logger.debug(f"实名制, 选择购票人: {config['buyer_index']}")
             buyer_index_list = config['buyer_index']
-            buyer_json = self.client.api.buyer()
+            buyer_json = self.client.client.buyer()
             
             buyer_info_list = []
             for i in buyer_index_list:
@@ -105,7 +105,7 @@ class Order:
         elif 'address_index' in config and config['address_index']:
             logger.debug(f"非实名制, 选择地址: {config['address_index'][0]}")
             address_index = config['address_index'][0]
-            address_json = self.client.api.address()            # 非实名制
+            address_json = self.client.client.address()            # 非实名制
             self.buyer = address_json['data']['addr_list'][address_index]['name']
             self.tel = address_json['data']['addr_list'][address_index]['phone']
             self.count = config['count']
@@ -113,7 +113,7 @@ class Order:
         # 构建票种信息
         if project_json['data']['sales_dates'] != []: # 存在小日历
             logger.debug(f"存在小日历, 选择日期: {config['sales_date'][0]}")
-            project_json_4_ticket = self.client.api.project_info_by_date(project_id=self.project_id, date=config['sales_date'][0])
+            project_json_4_ticket = self.client.client.project_info_by_date(project_id=self.project_id, date=config['sales_date'][0])
         else:
             project_json_4_ticket = project_json
         
@@ -149,7 +149,7 @@ class Order:
             
 
     def prepare(self) -> Optional[prepareJson]:
-        prepare_json = self.client.api.prepare(
+        prepare_json = self.client.client.prepare(
             project_id=self.project_id,
             count=self.count,
             screen_id=self.screen_id,
@@ -164,7 +164,7 @@ class Order:
             return 
       
     def confirm(self) -> Optional[confirmJson]:
-        confirm_json = self.client.api.confirm(
+        confirm_json = self.client.client.confirm(
             project_id=self.project_id,
             token=self.token,
             voucher="",
@@ -179,7 +179,7 @@ class Order:
             return 
     
     def create(self) -> createJson:
-        create_json = self.client.api.create(
+        create_json = self.client.client.create(
             project_id=self.project_id,
             token=self.token,
             screen_id=self.screen_id,

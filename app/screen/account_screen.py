@@ -105,7 +105,7 @@ class AccountScreen:
                 # 创建新的虚拟设备并绑定到 Api
                 device = create_virtual_device()
                 self.client.set_device(device)
-                cookie = self.client.api.qr_login()
+                cookie = self.client.client.qr_login()
                 if not cookie:
                     logger.error("扫码登录失败，请重试或使用其他方式。")
                     continue
@@ -131,7 +131,7 @@ class AccountScreen:
             
             # 登录成功后获取bili_ticket以降低风控概率
             try:
-                self.client.api.get_bili_ticket()
+                self.client.client.get_bili_ticket()
             except Exception as e:
                 logger.warning(f"获取bili_ticket失败，但不影响账号设置: {e}")
 

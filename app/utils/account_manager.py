@@ -36,12 +36,12 @@ ACCOUNT_DIR = Path("account")
 ACCOUNT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def create_account(api: Client) -> Optional[Account]:
+def create_account(client: Client) -> Optional[Account]:
     """创建新账号"""
     try:
         # 创建临时API客户端检查cookie有效性并获取用户信息
 
-        user_info = api.my_info()
+        user_info = client.client.my_info()
         
         if user_info.get("code") != 0:
             logger.error(f"创建账号失败: Cookie无效")
@@ -57,13 +57,13 @@ def create_account(api: Client) -> Optional[Account]:
             return None
         
         # 生成虚拟设备
-        device = api.device
+        device = client.device
         
         # 创建账号
         account = Account(
             user_id=user_id,
             username=username,
-            cookie=api.cookie,
+            cookie=client.cookie,
             device=device,
         )
         

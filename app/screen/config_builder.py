@@ -97,9 +97,7 @@ class ConfigBuilder:
         logger.opt(colors=True).info(f'<cyan>编辑配置文件: {config_path.name}</cyan>')
         self.build_config(config_path)
 
-    # ------------------------------------------------------------------
-    # 账号选择流程（替代旧 login）
-    # ------------------------------------------------------------------
+    
     def _choose_account(self, preferred_user_id: Optional[str] = None):
         """选择账号返回 True，否则 False，可指定首选账号ID"""
         cookie = AccountScreen().choose_account(preferred_user_id)
@@ -125,7 +123,7 @@ class ConfigBuilder:
         try:
             self.api.load_cookie(self.cookie)
             self.api.set_device(account.device)
-            my_info_json = self.api.my_info()
+            my_info_json = self.api.client.my_info()
             logger.opt(colors=True).info(f'登录用户: {my_info_json["data"]["profile"]["name"]}')
             return True
         except Exception as e:
@@ -145,12 +143,11 @@ class ConfigBuilder:
             if project_input.isdigit():
                 project_id = project_input
                 logger.info('配置文件生成中...')
-                project_json = self.api.project(project_id=project_id)
+                project_json = self.api.client.project(project_id=project_id)
             else:
                 # 作为关键词搜索
                 logger.info(f'正在搜索关键词: {project_input}...')
-                search_result = self.api.search_project(keyword=project_input)
-                # logger.debug(search_result)
+                search_result = self.api.client.search_project(keyword=project_input)
                 
                 # 修复判断条件，正确检查搜索结果
                 if search_result.get('errno') != 0 or not search_result.get('data', {}).get('result'):
@@ -192,7 +189,7 @@ class ConfigBuilder:
                 
                 project_id = selected_project.data
                 logger.info('配置文件生成中...')
-                project_json = self.api.project(project_id=project_id)
+                project_json = self.api.client.project(project_id=project_id)
             
             logger.debug(project_json)
             try:
@@ -311,7 +308,7 @@ class ConfigBuilder:
         # 处理纸质票地址
         if project_json['data']['has_paper_ticket']:
             logger.opt(colors=True).info('<cyan>此演出为纸质票演出, 请选择收货地址</cyan>')
-            address_json = self.api.address()
+            address_json = self.api.client.address()
             address_choices = []
             for i, addr in enumerate(address_json['data']['addr_list']):
                 choice_text = f"{addr['name']} {addr['phone']} {addr['prov']}{addr['city']}{addr['area']}{addr['addr']}"
@@ -335,7 +332,7 @@ class ConfigBuilder:
             
         # 处理实名制购票人
         if is_realname:
-            buyer_json = self.api.buyer()
+            buyer_json = self.api.client.buyer()
             buyer_choices = []
             for i, buyer in enumerate(buyer_json['data']['list']):
                 choice_text = f"{buyer['name']} {buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
@@ -375,7 +372,7 @@ class ConfigBuilder:
             
             if not address_outputed:
                 # 如果不是纸质票，需要选择记名信息
-                address_json = self.api.address()
+                address_json = self.api.client.address()
                 address_choices = []
                 for i, addr in enumerate(address_json['data']['addr_list']):
                     choice_text = f"{addr['name']} {addr['phone']}"

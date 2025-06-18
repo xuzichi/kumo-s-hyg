@@ -178,81 +178,86 @@ class ConfigExecutor:
                 self.client.load_cookie(account.cookie)
                 self.client.set_device(account.device)
                 
-                # 确保bili_ticket有效，降低风控概率
+                # 准备阶段：检查账号状态和获取必要信息
                 try:
-                    self.client.api.ensure_bili_ticket()
+                    self.client.client.ensure_bili_ticket()
+                    
+                    # 获取当前用户信息
+                    my_info_json = self.client.client.my_info()
+                    logger.opt(colors=True).info(f'当前用户: {my_info_json["data"]["profile"]["name"]}')
+                    
                 except Exception as e:
-                    logger.warning(f"更新bili_ticket失败: {e}, 但继续执行")
-                
-                my_info_json = self.client.api.my_info()
-                if my_info_json["code"] == -101:
-                    logger.error("cookie已失效, 请重新登录.")
+                    logger.error(f"获取用户信息失败: {e}")
                     return
+                
+                try:
+                    # 获取项目信息以获取演出名称
+                    project_json = self.client.client.project(project_id=config["project_id"])
 
-                # 当前设备信息改用账号中的虚拟设备
-                device_name = account.device.device_name if account else "未知设备"
-                user_name = account.username if account else "未知用户"
+                    # 打印配置摘要信息
+                    logger.opt(colors=True).info("─" * 50)
+                    logger.opt(colors=True).info(f"<cyan>【配置摘要】</cyan>")
+                    logger.opt(colors=True).info(f"项目名称: {project_json['data']['name']}")
+                    logger.opt(colors=True).info(f"虚拟设备: {account.device.device_name if account else '未知设备'}")
+                    logger.opt(colors=True).info(f"登录用户: {account.username if account else '未知用户'}")
 
-                # 获取项目详细信息
-                project_json = self.client.api.project(project_id=config["project_id"])
-
-                # 打印配置摘要信息
-                logger.opt(colors=True).info("─" * 50)
-                logger.opt(colors=True).info(f"<cyan>【配置摘要】</cyan>")
-                logger.opt(colors=True).info(f"项目名称: {project_json['data']['name']}")
-                logger.opt(colors=True).info(f"虚拟设备: {device_name}")
-                logger.opt(colors=True).info(f"登录用户: {user_name}")
-
-                # 打印票种信息
-                if "screen_ticket" in config and config["screen_ticket"]:
-                    for ticket_info in config["screen_ticket"]:
-                        screen_idx, ticket_idx = ticket_info
-                        if screen_idx < len(
-                            project_json["data"]["screen_list"]
-                        ) and ticket_idx < len(
-                            project_json["data"]["screen_list"][screen_idx][
-                                "ticket_list"
-                            ]
-                        ):
-                            screen = project_json["data"]["screen_list"][screen_idx]
-                            ticket = screen["ticket_list"][ticket_idx]
-                            price_yuan = ticket["price"] / 100
-                            logger.opt(colors=True).info(
-                                f'选择票种: {screen["name"]} {ticket["desc"]} {price_yuan}元'
-                            )
-
-                # 打印地址信息（如果有）
-                if "address_index" in config and config["address_index"]:
-                    address_json = self.client.api.address()
-                    for addr_idx in config["address_index"]:
-                        if addr_idx < len(address_json["data"]["addr_list"]):
-                            addr = address_json["data"]["addr_list"][addr_idx]
-                            if project_json["data"].get("has_paper_ticket", False):
+                    # 打印票种信息
+                    if "screen_ticket" in config and config["screen_ticket"]:
+                        for ticket_info in config["screen_ticket"]:
+                            screen_idx, ticket_idx = ticket_info
+                            if screen_idx < len(
+                                project_json["data"]["screen_list"]
+                            ) and ticket_idx < len(
+                                project_json["data"]["screen_list"][screen_idx][
+                                    "ticket_list"
+                                ]
+                            ):
+                                screen = project_json["data"]["screen_list"][screen_idx]
+                                ticket = screen["ticket_list"][ticket_idx]
+                                price_yuan = ticket["price"] / 100
                                 logger.opt(colors=True).info(
-                                    f'收货地址: {addr["name"]} {addr["phone"]} {addr["prov"]}{addr["city"]}{addr["area"]}{addr["addr"]}'
-                                )
-                            else:
-                                logger.opt(colors=True).info(
-                                    f'记名信息: {addr["name"]} {addr["phone"]}'
+                                    f'选择票种: {screen["name"]} {ticket["desc"]} {price_yuan}元'
                                 )
 
-                # 打印购票人信息（如果有）
-                if "buyer_index" in config and config["buyer_index"]:
-                    buyer_json = self.client.api.buyer()
-                    for buyer_idx in config["buyer_index"]:
-                        if buyer_idx < len(buyer_json["data"]["list"]):
-                            buyer = buyer_json["data"]["list"][buyer_idx]
-                            masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
-                            logger.opt(colors=True).info(
-                                f'购票人: {buyer["name"]} {masked_id}'
-                            )
+                    # 打印地址信息（如果有）
+                    if "address_index" in config and config["address_index"]:
+                        address_json = self.client.client.address()
+                        for addr_idx in config["address_index"]:
+                            if addr_idx < len(address_json["data"]["addr_list"]):
+                                addr = address_json["data"]["addr_list"][addr_idx]
+                                if project_json["data"].get("has_paper_ticket", False):
+                                    logger.opt(colors=True).info(
+                                        f'收货地址: {addr["name"]} {addr["phone"]} {addr["prov"]}{addr["city"]}{addr["area"]}{addr["addr"]}'
+                                    )
+                                else:
+                                    logger.opt(colors=True).info(
+                                        f'记名信息: {addr["name"]} {addr["phone"]}'
+                                    )
 
-                # 打印购票数量（非实名制）
-                if "count" in config:
-                    logger.opt(colors=True).info(f"购票数量: {config['count']}张")
+                    # 打印购票人信息（如果有）
+                    if "buyer_index" in config and config["buyer_index"]:
+                        buyer_json = self.client.client.buyer()
+                        for buyer_idx in config["buyer_index"]:
+                            if buyer_idx < len(buyer_json["data"]["list"]):
+                                buyer = buyer_json["data"]["list"][buyer_idx]
+                                masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
+                                logger.opt(colors=True).info(
+                                    f'购票人: {buyer["name"]} {masked_id}'
+                                )
 
-                logger.opt(colors=True).info("─" * 50)
-                logger.opt(colors=True).info("<cyan>即将开始抢票...</cyan>")
+                    # 打印购票数量（非实名制）
+                    if "count" in config:
+                        logger.opt(colors=True).info(f"购票数量: {config['count']}张")
+
+                    logger.opt(colors=True).info("─" * 50)
+                    logger.opt(colors=True).info("<cyan>即将开始抢票...</cyan>")
+
+                except Exception as e:
+                    logger.error("读取配置文件失败, 请检查配置文件格式")
+                    import traceback
+
+                    logger.debug(traceback.format_exc())
+                    return
 
             except Exception as e:
                 logger.error("读取配置文件失败, 请检查配置文件格式")

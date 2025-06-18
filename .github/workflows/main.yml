@@ -82,76 +82,77 @@ jobs:
         name: windows-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
         path: dist/${{ steps.get_version.outputs.output_name_str }}.exe # 使用步骤输出的文件名
 
-  build-macos:
-    runs-on: macos-latest
-    permissions:
-      contents: write
-    outputs: # 定义作业输出
-      version: ${{ steps.get_version.outputs.version_str }}
-      output_name: ${{ steps.get_version.outputs.output_name_str }} # 输出构建产物的名称
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        fetch-tags: true
+  # build-macos:
+  #   runs-on: macos-latest
+  #   permissions:
+  #     contents: write
+  #   outputs: # 定义作业输出
+  #     version: ${{ steps.get_version.outputs.version_str }}
+  #     output_name: ${{ steps.get_version.outputs.output_name_str }} # 输出构建产物的名称
+  #   steps:
+  #   - name: Checkout repository
+  #     uses: actions/checkout@v4
+  #     with:
+  #       fetch-depth: 0
+  #       fetch-tags: true
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+  #   - name: Set up Python
+  #     uses: actions/setup-python@v5
+  #     with:
+  #       python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
+  #   - name: Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install pyinstaller
+  #       pip install -r requirements.txt
 
-    - name: Extract version from __main__.py
-      id: get_version # 给步骤一个 ID
-      run: |
-        EXTRACTED_VERSION=$(python run.py -v)
-        if [ -z "$EXTRACTED_VERSION" ]; then
-          echo "::error::Failed to extract version from python run.py -v"
-          exit 1 # 确保在提取失败时作业失败
-        fi
-        OUTPUT_FILE_NAME="${{ env.APP_NAME }}-macos-v$EXTRACTED_VERSION"
+  #   - name: Extract version from __main__.py
+  #     id: get_version # 给步骤一个 ID
+  #     run: |
+  #       EXTRACTED_VERSION=$(python run.py -v)
+  #       if [ -z "$EXTRACTED_VERSION" ]; then
+  #         echo "::error::Failed to extract version from python run.py -v"
+  #         exit 1 # 确保在提取失败时作业失败
+  #       fi
+  #       OUTPUT_FILE_NAME="${{ env.APP_NAME }}-macos-v$EXTRACTED_VERSION"
         
-        # 设置环境变量供当前作业后续步骤使用
-        echo "VERSION=$EXTRACTED_VERSION" >> $GITHUB_ENV
-        echo "OUTPUT_NAME=$OUTPUT_FILE_NAME" >> $GITHUB_ENV
+  #       # 设置环境变量供当前作业后续步骤使用
+  #       echo "VERSION=$EXTRACTED_VERSION" >> $GITHUB_ENV
+  #       echo "OUTPUT_NAME=$OUTPUT_FILE_NAME" >> $GITHUB_ENV
         
-        # 设置作业输出，供其他作业使用
-        echo "version_str=$EXTRACTED_VERSION" >> $GITHUB_OUTPUT
-        echo "output_name_str=$OUTPUT_FILE_NAME" >> $GITHUB_OUTPUT
+  #       # 设置作业输出，供其他作业使用
+  #       echo "version_str=$EXTRACTED_VERSION" >> $GITHUB_OUTPUT
+  #       echo "output_name_str=$OUTPUT_FILE_NAME" >> $GITHUB_OUTPUT
         
-        echo "Extracted Version: $EXTRACTED_VERSION"
-        echo "Set OUTPUT_NAME to: $OUTPUT_FILE_NAME"
-        echo "Set job output version_str to: $EXTRACTED_VERSION"
-        echo "Set job output output_name_str to: $OUTPUT_FILE_NAME"
+  #       echo "Extracted Version: $EXTRACTED_VERSION"
+  #       echo "Set OUTPUT_NAME to: $OUTPUT_FILE_NAME"
+  #       echo "Set job output version_str to: $EXTRACTED_VERSION"
+  #       echo "Set job output output_name_str to: $OUTPUT_FILE_NAME"
 
-    - name: Verify Environment Variables
-      run: |
-        echo "VERSION is: ${{ env.VERSION }}"
-        echo "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
-        if [ -z "${{ env.OUTPUT_NAME }}" ]; then
-            echo "::error::OUTPUT_NAME environment variable is not set or is empty after extraction!"
-            exit 1
-        fi
+  #   - name: Verify Environment Variables
+  #     run: |
+  #       echo "VERSION is: ${{ env.VERSION }}"
+  #       echo "OUTPUT_NAME is: ${{ env.OUTPUT_NAME }}"
+  #       if [ -z "${{ env.OUTPUT_NAME }}" ]; then
+  #           echo "::error::OUTPUT_NAME environment variable is not set or is empty after extraction!"
+  #           exit 1
+  #       fi
 
-    - name: Build macOS App
-      run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --hidden-import pillow --hidden-import bili_ticket_gt_python --add-data="app:app" run.py
-        chmod +x dist/"${{ env.OUTPUT_NAME }}"
+  #   - name: Build macOS App
+  #     run: |
+  #       pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import qrcode --hidden-import loguru --hidden-import PIL --hidden-import pillow --hidden-import bili_ticket_gt_python --add-data="app:app" run.py
+  #       chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
-    - name: Upload macOS Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
-        path: dist/${{ steps.get_version.outputs.output_name_str }} # 使用步骤输出的文件名
+  #   - name: Upload macOS Artifact
+  #     uses: actions/upload-artifact@v4
+  #     with:
+  #       name: macos-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
+  #       path: dist/${{ steps.get_version.outputs.output_name_str }} # 使用步骤输出的文件名
 
   create-release:
-    needs: [build-windows, build-macos] # 在两个构建都成功后运行
+    # needs: [build-windows, build-macos] # 在两个构建都成功后运行
+    needs: [build-windows] # 暂时停止macos构建
     runs-on: ubuntu-latest
     permissions:
       contents: write # 需要创建标签和发布

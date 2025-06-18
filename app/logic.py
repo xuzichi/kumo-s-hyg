@@ -97,7 +97,7 @@ class Logic():
                         logger.warning(f"下单成功, 正在判断是否为假票...")
                         pay_token = res["data"]["token"]
                         order_id = res["data"]["orderId"] if "orderId" in res["data"] else None
-                        create_status = self.order.client.api.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
+                        create_status = self.order.client.client.create_status(project_id=self.order.project_id, pay_token=pay_token, order_id=order_id)
                         if create_status["errno"] == 0:
                             logger.success('购票成功! 请尽快打开订单界面支付!')
                             # 推送
