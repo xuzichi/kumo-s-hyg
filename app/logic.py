@@ -26,7 +26,7 @@ from .utils.log import logger
 import yaml
 from .order import Order
 from .client import Client
-from .client import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
+from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 from .utils.push_manager import push_manager
 
 # 错误码处理增强
@@ -121,7 +121,7 @@ class Logic():
                         if "ga_data" in res.get("data", {}):
                             logger.info("检测到验证码，尝试自动处理...")
                             risk_params = res["data"]["ga_data"]["riskParams"]
-                            if self.order.client.gaia_handler.handle_validation(risk_params):
+                            if self.order.client.handle_gaia(risk_params):
                                 logger.success("验证码处理成功，重新下单")
                                 # 重新prepare和confirm以获取新token
                                 self.order.prepare()
@@ -130,7 +130,6 @@ class Logic():
                                 continue
                             else:
                                 logger.error("验证码处理失败")
-                                time.sleep(0.9)  # 等待一段时间后重试
                                 continue
                                 
                     elif error_code == 412:
@@ -158,7 +157,6 @@ class Logic():
                             order_attempt = 0  # 重置计数器
                         else:
                             logger.info(f"{error_msg}")
-                            
                         continue
                     # elif error_code == -401:
                     #     logger.warning(f"{error_msg} - 可能触发了风控验证")

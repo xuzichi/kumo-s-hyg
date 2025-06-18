@@ -24,7 +24,7 @@ from .utils.log import logger
 import yaml
 
 from .client import Client
-from .client import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
+from .api import prepareJson, confirmJson, createJson, ProjectJson, BuyerJson, AddressJson
 
 
 class Order:
@@ -76,7 +76,7 @@ class Order:
         '''
         
         # 确保bili_ticket有效，降低风控概率
-        self.client.ensure_bili_ticket()
+        self.client.api.ensure_bili_ticket()
         
         project_json = self.client.api.project(project_id=self.project_id)
         screen_idx, ticket_idx = config['screen_ticket'][0]

@@ -5,5 +5,4 @@ PyYAML
 qrcode
 loguru
 pillow
-bili_ticket_gt_python 
-pillow
+bili_ticket_gt_python

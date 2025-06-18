@@ -23,6 +23,8 @@ from .config_builder import ConfigBuilder
 from app.utils import account_manager
 from .config_executor import ConfigExecutor
 from .push_screen import PushScreen
+from .captcha_test_screen import CaptchaTestScreen
+# from .captcha_screen import CaptchaScreen  # 已删除
 
 
 class Main:
@@ -54,6 +56,7 @@ class Main:
             
             choices.append(Choice("+ 新建配置", data="new"))
             choices.append(Choice("! 推送管理", data="push"))
+            choices.append(Choice("# 过码测试", data="captcha_test"))
             choices.append(Choice("← 退出", data="exit"))
             
             _ = ListPrompt(
@@ -66,8 +69,9 @@ class Main:
                     self.build_config()
                 elif _.data == "push":
                     PushScreen().run()
+                elif _.data == "captcha_test":
+                    CaptchaTestScreen().run()
                 elif _.data == "exit":
-                    # logger.opt(colors=True).info('exit, bye!')
                     break
                 elif isinstance(_.data, Path):
                     self.config_executor.show_config_menu(_.data)

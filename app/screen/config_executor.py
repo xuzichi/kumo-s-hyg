@@ -180,7 +180,7 @@ class ConfigExecutor:
                 
                 # 确保bili_ticket有效，降低风控概率
                 try:
-                    self.client.ensure_bili_ticket()
+                    self.client.api.ensure_bili_ticket()
                 except Exception as e:
                     logger.warning(f"更新bili_ticket失败: {e}, 但继续执行")
                 

@@ -5,9 +5,9 @@ from noneprompt import CancelledError
 from .utils.log import init_log, logger
 from app.screen import Main
 from .client import Client
-from .gaia import GaiaCaptchaManager
+# from .gaia import GaiaCaptchaManager  # 已删除
 
-__versions__ = "0.5.1"
+__versions__ = "0.5.2"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":

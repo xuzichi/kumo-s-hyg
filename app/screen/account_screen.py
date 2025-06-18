@@ -26,7 +26,7 @@ class AccountScreen:
     """账号管理界面"""
     
     def __init__(self):
-        self.api = Client()
+        self.client = Client()
     
     def choose_account(self, preferred_user_id: Optional[str] = None) -> Optional[str]:
         """展示账号选择 / 创建 / 删除界面，返回选择后的有效 Cookie。"""
@@ -104,8 +104,8 @@ class AccountScreen:
                 logger.opt(colors=True).info("<cyan>正在生成二维码...</cyan>")
                 # 创建新的虚拟设备并绑定到 Api
                 device = create_virtual_device()
-                self.api.set_device(device)
-                cookie = self.api.qr_login()
+                self.client.set_device(device)
+                cookie = self.client.api.qr_login()
                 if not cookie:
                     logger.error("扫码登录失败，请重试或使用其他方式。")
                     continue
@@ -117,7 +117,7 @@ class AccountScreen:
                 try:
                     # 同样先创建并绑定虚拟设备
                     device = create_virtual_device()
-                    self.api.set_device(device)
+                    self.client.set_device(device)
                     cookie = InputPrompt("请输入 Cookie:").prompt()
                 except CancelledError:
                     return None
@@ -127,16 +127,16 @@ class AccountScreen:
                 continue
 
             # 将 Cookie 写入 Api
-            self.api.load_cookie(cookie)
+            self.client.load_cookie(cookie)
             
             # 登录成功后获取bili_ticket以降低风控概率
             try:
-                self.api.get_bili_ticket()
+                self.client.api.get_bili_ticket()
             except Exception as e:
                 logger.warning(f"获取bili_ticket失败，但不影响账号设置: {e}")
 
             # 创建并保存账号
-            account = account_manager.create_account(self.api)
+            account = account_manager.create_account(self.client)
             if account:
                 logger.success(f"账号 <green>{account.username}</green> 已保存！")
                 return cookie
