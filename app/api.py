@@ -277,20 +277,14 @@ class API:
         SearchProjectJson
             搜索结果
         """
-        url = 'https://show.bilibili.com/api/ticket/project/listV2'
+        # 使用新的搜索API
+        url = 'https://show.bilibili.com/api/ticket/search/list'
         params = {
-            'version': 'v1',
-            'page': page,
+            'version': '134',
+            'keyword': keyword,
             'pagesize': pagesize,
-            'area': -1,
-            'filter': '',
+            'page': page,
             'platform': 'web',
-            'p_search': keyword,
-            'style_id': -1,
-            'tag_id': -1,
-            'type': -1,
-            'is_festival': -1,
-            'pc_tag_id': -1,
         }
         
         # 使用移动端请求头

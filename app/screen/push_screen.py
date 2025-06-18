@@ -37,7 +37,7 @@ class PushScreen:
         action = ListPrompt(
             f"操作配置: 【{config.provider.capitalize()}】{config.name}",
             choices=[
-                Choice("删除此配置", data="delete"),
+                Choice("删除", data="delete"),
                 Choice("← 返回", data="back"),
             ],
         ).prompt()

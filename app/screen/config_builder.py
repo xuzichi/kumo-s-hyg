@@ -28,7 +28,7 @@ from app.utils import account_manager as am
 
 class ConfigBuilder:
     def __init__(self):
-        self.api = Client()
+        self.client = Client()
         self.cookie = None
         self.template_config = None  # 用于存储模板配置
 
@@ -121,9 +121,9 @@ class ConfigBuilder:
 
         # 载入 cookie 到 API 供后续接口调用
         try:
-            self.api.load_cookie(self.cookie)
-            self.api.set_device(account.device)
-            my_info_json = self.api.client.my_info()
+            self.client.load_cookie(self.cookie)
+            self.client.set_device(account.device)
+            my_info_json = self.client.api.my_info()
             logger.opt(colors=True).info(f'登录用户: {my_info_json["data"]["profile"]["name"]}')
             return True
         except Exception as e:
@@ -143,20 +143,28 @@ class ConfigBuilder:
             if project_input.isdigit():
                 project_id = project_input
                 logger.info('配置文件生成中...')
-                project_json = self.api.client.project(project_id=project_id)
+                project_json = self.client.api.project(project_id=project_id)
             else:
                 # 作为关键词搜索
                 logger.info(f'正在搜索关键词: {project_input}...')
-                search_result = self.api.client.search_project(keyword=project_input)
+                search_result = self.client.api.search_project(keyword=project_input)
+                
+                # 添加debug输出
+                logger.debug(f"搜索API返回: {search_result}")
                 
                 # 修复判断条件，正确检查搜索结果
                 if search_result.get('errno') != 0 or not search_result.get('data', {}).get('result'):
                     logger.error(f"搜索失败或未找到结果，请检查关键词或直接输入项目ID")
+                    logger.debug(f"搜索失败详情: errno={search_result.get('errno')}, msg={search_result.get('msg')}")
                     continue
+                
+                logger.debug(f"搜索成功，找到 {len(search_result['data']['result'])} 个结果")
                 
                 # 构建选择列表
                 project_choices = []
-                for item in search_result['data']['result']:
+                for i, item in enumerate(search_result['data']['result']):
+                    logger.debug(f"处理搜索结果 {i+1}: {item}")
+                    
                     # 格式化价格显示，将分转为元
                     price_info = ""
                     if item.get('price_low') and item.get('price_high'):
@@ -164,12 +172,15 @@ class ConfigBuilder:
                         price_high = item['price_high'] / 100
                         price_info = f" ¥{price_low}-{price_high}"
                     
-                    # 格式化日期显示
+                    # 格式化日期显示 - 适配新的API格式
                     date_info = f" {item.get('start_time', '')} - {item.get('end_time', '')}"
                     
-                    # 构建选项文本
-                    choice_text = f"{item['title']}{date_info}{price_info} [{item['sale_flag']}]"
-                    project_choices.append(Choice(choice_text, data=str(item['id'])))
+                    # 构建选项文本 - 适配新的API字段名
+                    title = item.get('title') or item.get('project_name', '未知演出')  # 新API可能有 title 或 project_name
+                    sale_flag = item.get('sale_flag', '')
+                    item_id = item.get('id', '')
+                    choice_text = f"{title}{date_info}{price_info} [{sale_flag}]"
+                    project_choices.append(Choice(choice_text, data=str(item_id)))
                 
                 if not project_choices:
                     logger.error("未找到相关演出，请尝试其他关键词或直接输入项目ID")
@@ -189,7 +200,7 @@ class ConfigBuilder:
                 
                 project_id = selected_project.data
                 logger.info('配置文件生成中...')
-                project_json = self.api.client.project(project_id=project_id)
+                project_json = self.client.api.project(project_id=project_id)
             
             logger.debug(project_json)
             try:
@@ -308,7 +319,7 @@ class ConfigBuilder:
         # 处理纸质票地址
         if project_json['data']['has_paper_ticket']:
             logger.opt(colors=True).info('<cyan>此演出为纸质票演出, 请选择收货地址</cyan>')
-            address_json = self.api.client.address()
+            address_json = self.client.api.address()
             address_choices = []
             for i, addr in enumerate(address_json['data']['addr_list']):
                 choice_text = f"{addr['name']} {addr['phone']} {addr['prov']}{addr['city']}{addr['area']}{addr['addr']}"
@@ -332,7 +343,7 @@ class ConfigBuilder:
             
         # 处理实名制购票人
         if is_realname:
-            buyer_json = self.api.client.buyer()
+            buyer_json = self.client.api.buyer()
             buyer_choices = []
             for i, buyer in enumerate(buyer_json['data']['list']):
                 choice_text = f"{buyer['name']} {buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
@@ -372,7 +383,7 @@ class ConfigBuilder:
             
             if not address_outputed:
                 # 如果不是纸质票，需要选择记名信息
-                address_json = self.api.client.address()
+                address_json = self.client.api.address()
                 address_choices = []
                 for i, addr in enumerate(address_json['data']['addr_list']):
                     choice_text = f"{addr['name']} {addr['phone']}"

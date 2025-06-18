@@ -105,10 +105,15 @@ class AccountScreen:
                 # 创建新的虚拟设备并绑定到 Api
                 device = create_virtual_device()
                 self.client.set_device(device)
-                cookie = self.client.client.qr_login()
+                logger.info("正在请求二维码...")
+                cookie = self.client.api.qr_login()
                 if not cookie:
                     logger.error("扫码登录失败，请重试或使用其他方式。")
                     continue
+                if cookie:
+                    logger.info("准备获取账号验证ticket...")
+                    self.client.load_cookie(cookie)
+                    self.client.api.get_bili_ticket()
             elif _.data == "input":
                 logger.opt(colors=True).info(
                     "请使用浏览器登录B站后, 打开 <green>https://account.bilibili.com/account/home</green>, "
@@ -131,7 +136,7 @@ class AccountScreen:
             
             # 登录成功后获取bili_ticket以降低风控概率
             try:
-                self.client.client.get_bili_ticket()
+                self.client.api.get_bili_ticket()
             except Exception as e:
                 logger.warning(f"获取bili_ticket失败，但不影响账号设置: {e}")
 

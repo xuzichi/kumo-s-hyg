@@ -180,10 +180,10 @@ class ConfigExecutor:
                 
                 # 准备阶段：检查账号状态和获取必要信息
                 try:
-                    self.client.client.ensure_bili_ticket()
+                    self.client.api.ensure_bili_ticket()
                     
                     # 获取当前用户信息
-                    my_info_json = self.client.client.my_info()
+                    my_info_json = self.client.api.my_info()
                     logger.opt(colors=True).info(f'当前用户: {my_info_json["data"]["profile"]["name"]}')
                     
                 except Exception as e:
@@ -192,7 +192,7 @@ class ConfigExecutor:
                 
                 try:
                     # 获取项目信息以获取演出名称
-                    project_json = self.client.client.project(project_id=config["project_id"])
+                    project_json = self.client.api.project(project_id=config["project_id"])
 
                     # 打印配置摘要信息
                     logger.opt(colors=True).info("─" * 50)
@@ -221,7 +221,7 @@ class ConfigExecutor:
 
                     # 打印地址信息（如果有）
                     if "address_index" in config and config["address_index"]:
-                        address_json = self.client.client.address()
+                        address_json = self.client.api.address()
                         for addr_idx in config["address_index"]:
                             if addr_idx < len(address_json["data"]["addr_list"]):
                                 addr = address_json["data"]["addr_list"][addr_idx]
@@ -236,7 +236,7 @@ class ConfigExecutor:
 
                     # 打印购票人信息（如果有）
                     if "buyer_index" in config and config["buyer_index"]:
-                        buyer_json = self.client.client.buyer()
+                        buyer_json = self.client.api.buyer()
                         for buyer_idx in config["buyer_index"]:
                             if buyer_idx < len(buyer_json["data"]["list"]):
                                 buyer = buyer_json["data"]["list"][buyer_idx]

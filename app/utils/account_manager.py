@@ -41,7 +41,7 @@ def create_account(client: Client) -> Optional[Account]:
     try:
         # 创建临时API客户端检查cookie有效性并获取用户信息
 
-        user_info = client.client.my_info()
+        user_info = client.api.my_info()
         
         if user_info.get("code") != 0:
             logger.error(f"创建账号失败: Cookie无效")

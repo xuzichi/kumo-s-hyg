@@ -7,7 +7,7 @@ from app.screen import Main
 from .client import Client
 # from .gaia import GaiaCaptchaManager  # 已删除
 
-__versions__ = "0.5.4"
+__versions__ = "0.5.5"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
