@@ -2,7 +2,7 @@ import json
 import uuid
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
 
 import requests
 
@@ -15,118 +15,167 @@ PUSH_CONFIG_DIR.mkdir(exist_ok=True)
 @dataclass
 class PushConfig:
     """推送配置基类"""
-
     config_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Unnamed"
     provider: str = "base"
 
 
 @dataclass
-class PushplusConfig(PushConfig):
-    """Pushplus 配置"""
-
-    token: str = ""
-    provider: str = "pushplus"
-
-
-@dataclass
 class BarkConfig(PushConfig):
     """Bark 配置"""
-
     url: str = ""  # e.g., https://api.day.app/your_key
     provider: str = "bark"
 
 
-PushConfigType = Union[PushplusConfig, BarkConfig]
+@dataclass
+class NtfyConfig(PushConfig):
+    """Ntfy 配置"""
+    server_url: str = ""  # 完整URL，例如：https://ntfy.sh/yourtopic
+    provider: str = "ntfy"
+
+
+PushConfigType = Union[BarkConfig, NtfyConfig]
 
 
 class PushManager:
     """推送管理器"""
 
-    def get_configs(self) -> List[PushConfigType]:
-        """获取所有推送配置"""
-        configs = []
-        for f in PUSH_CONFIG_DIR.glob("*.json"):
-            try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    data = json.load(fp)
-                    provider = data.get("provider")
-                    if provider == "pushplus":
-                        configs.append(PushplusConfig(**data))
-                    elif provider == "bark":
-                        configs.append(BarkConfig(**data))
-            except Exception as e:
-                logger.error(f"加载推送配置失败: {f.name}, {e}")
-        return configs
+    def __init__(self):
+        self.configs: List[PushConfigType] = []
+        self._load_configs()
 
-    def save_config(self, config: PushConfigType) -> None:
-        """保存推送配置"""
-        # 使用 config_id 确保文件名唯一
-        filename = f"{config.config_id}.json"
-        filepath = PUSH_CONFIG_DIR / filename
+    def _load_configs(self):
+        """加载所有配置"""
+        self.configs = []
+        for config_file in PUSH_CONFIG_DIR.glob("*.json"):
+            try:
+                with open(config_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    provider = data.get("provider", "")
+                    if provider == "bark":
+                        self.configs.append(BarkConfig(**data))
+                    elif provider == "ntfy":
+                        self.configs.append(NtfyConfig(**data))
+            except Exception as e:
+                logger.error(f"加载配置失败: {config_file} {e}")
+
+    def get_configs(self) -> List[PushConfigType]:
+        """获取所有配置"""
+        return self.configs
+
+    def get_config(self, config_id: str) -> Optional[PushConfigType]:
+        """根据ID获取配置"""
+        for config in self.configs:
+            if config.config_id == config_id:
+                return config
+        return None
+
+    def add_config(self, config: PushConfigType) -> bool:
+        """添加配置"""
         try:
-            with open(filepath, "w", encoding="utf-8") as fp:
-                json.dump(asdict(config), fp, ensure_ascii=False, indent=4)
-            logger.success(f"推送配置已保存: {config.name}")
+            self.configs.append(config)
+            config_file = PUSH_CONFIG_DIR / f"{config.config_id}.json"
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(asdict(config), f, ensure_ascii=False, indent=4)
+            return True
         except Exception as e:
-            logger.error(f"保存推送配置失败: {config.name}, {e}")
+            logger.error(f"添加配置失败: {e}")
+            return False
+
+    def update_config(self, config: PushConfigType) -> bool:
+        """更新配置"""
+        try:
+            for i, c in enumerate(self.configs):
+                if c.config_id == config.config_id:
+                    self.configs[i] = config
+                    config_file = PUSH_CONFIG_DIR / f"{config.config_id}.json"
+                    with open(config_file, "w", encoding="utf-8") as f:
+                        json.dump(asdict(config), f, ensure_ascii=False, indent=4)
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"更新配置失败: {e}")
+            return False
 
     def delete_config(self, config_id: str) -> bool:
-        """通过 ID 删除配置"""
-        filepath = PUSH_CONFIG_DIR / f"{config_id}.json"
-        if filepath.exists():
-            try:
-                filepath.unlink()
-                logger.success(f"推送配置已删除: {config_id}")
-                return True
-            except Exception as e:
-                logger.error(f"删除推送配置失败: {config_id}, {e}")
-                return False
-        logger.warning(f"未找到要删除的推送配置: {config_id}")
-        return False
+        """删除配置"""
+        try:
+            for i, c in enumerate(self.configs):
+                if c.config_id == config_id:
+                    self.configs.pop(i)
+                    config_file = PUSH_CONFIG_DIR / f"{config_id}.json"
+                    config_file.unlink(missing_ok=True)
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"删除配置失败: {e}")
+            return False
 
-    def send(self, title: str, content: str, configs: Optional[List[PushConfigType]] = None):
-        """发送通知到所有已配置的推送通道"""
-        if configs is None:
-            configs = self.get_configs()
-
-        if not configs:
-            logger.debug("没有可用的推送配置，跳过通知。")
-            return
-
-        for config in configs:
-            try:
-                if isinstance(config, PushplusConfig):
-                    self._send_pushplus(config, title, content)
-                elif isinstance(config, BarkConfig):
-                    self._send_bark(config, title, content)
-            except Exception as e:
-                logger.error(f"发送通知到 {config.name} ({config.provider}) 失败: {e}")
-
-    def _send_pushplus(self, config: PushplusConfig, title: str, content: str):
-        """发送到 Pushplus"""
-        if not config.token:
-            return
-        url = "http://www.pushplus.plus/send"
-        payload = {"token": config.token, "title": title, "content": content, "template": "html"}
-        response = requests.post(url, json=payload, timeout=10)
-        result = response.json()
-        if result.get("code") == 200:
-            logger.info(f"Pushplus 推送成功: {config.name}")
+    def push(self, title: str, content: str, config_id: Optional[str] = None) -> Dict[str, Dict]:
+        """推送消息
+        
+        Args:
+            title: 标题
+            content: 内容
+            config_id: 配置ID，为None则推送到所有配置
+            
+        Returns:
+            Dict: 包含推送结果的字典，格式为 {config_name: {"success": bool, "message": str}}
+        """
+        results = {}
+        
+        if config_id:
+            # 推送到指定配置
+            config = self.get_config(config_id)
+            if config:
+                results[config.name] = self._send_push(config, title, content)
         else:
-            logger.error(f"Pushplus 推送失败: {config.name}, {result.get('msg')}")
+            # 推送到所有配置
+            for config in self.configs:
+                results[config.name] = self._send_push(config, title, content)
+                
+        return results
+    
+    def _send_push(self, config: PushConfigType, title: str, content: str) -> Dict:
+        """发送推送"""
+        try:
+            # Bark推送
+            if config.provider == "bark":
+                if not config.url:
+                    return {"success": False, "message": "Bark URL为空"}
+                
+                url = config.url.rstrip("/") + "/"
+                params = {"title": title, "body": content, "sound": "default"}
+                response = requests.post(url, params=params, timeout=10)
+                
+                if response.status_code != 200:
+                    return {"success": False, "message": f"HTTP错误: {response.status_code}"}
+                return {"success": True, "message": response.text}
+                
+            # Ntfy推送
+            elif config.provider == "ntfy":
+                if not config.server_url:
+                    return {"success": False, "message": "Ntfy服务器URL为空"}
 
-    def _send_bark(self, config: BarkConfig, title: str, content: str):
-        """发送到 Bark"""
-        if not config.url:
-            return
-        # Bark URL 格式: https://api.day.app/your_key/
-        url = f"{config.url.rstrip('/')}/{requests.utils.quote(title)}/{requests.utils.quote(content)}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            logger.info(f"Bark 推送成功: {config.name}")
-        else:
-            logger.error(f"Bark 推送失败: {config.name}, {response.text}")
+                # 使用 GET + 查询参数发布消息，避免非 ASCII 头字段导致的编码错误
+                publish_url = config.server_url.rstrip("/") + "/publish"
+                params = {
+                    "message": content,
+                    "title": title,
+                }
+                response = requests.get(publish_url, params=params, timeout=10)
 
-# 全局推送管理器实例
+                if response.status_code not in (200, 201, 202, 204):
+                    return {"success": False, "message": f"HTTP错误: {response.status_code}"}
+                return {"success": True, "message": response.text}
+                
+            # 其他类型
+            else:
+                return {"success": False, "message": f"不支持的推送服务: {config.provider}"}
+                
+        except Exception as e:
+            logger.error(f"推送到 {config.name} ({config.provider}) 失败: {e}")
+            return {"success": False, "message": str(e)}
+
+
 push_manager = PushManager() 

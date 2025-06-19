@@ -101,7 +101,7 @@ class Logic():
                         if create_status["errno"] == 0:
                             logger.success('购票成功! 请尽快打开订单界面支付!')
                             # 推送
-                            push_manager.send(title="[khyg] 购票成功", content=f"请在10分钟内打开订单界面支付!")
+                            push_manager.push(title="[khyg] 购票成功", content=f"请在10分钟内打开订单界面支付!")
                             break
                         else:
                             logger.error(f"假票, 请重新下单.")
@@ -147,7 +147,7 @@ class Logic():
                         continue
                     elif error_code in [100003, 100079, 100016, 100039, 100048]:
                         logger.warning(f"{error_msg}")
-                        push_manager.send(title="[khyg] 购票失败", content=f"{error_msg}")
+                        push_manager.push(title="[khyg] 购票失败", content=f"{error_msg}")
                         break  # 项目相关错误，直接退出
                     
                     elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -509, -799]:

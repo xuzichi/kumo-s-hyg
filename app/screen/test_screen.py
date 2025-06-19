@@ -7,7 +7,6 @@ import time
 import requests
 from typing import Optional
 import io
-import math
 
 from noneprompt import (
     ListPrompt,
@@ -19,7 +18,9 @@ from noneprompt import (
 
 from ..utils.log import logger
 from ..client import Client
-from ..utils.file_utils import file_utils  
+from ..utils.file_utils import file_utils
+from ..utils.push_manager import push_manager
+from ..screen.push_screen import PushScreen
 
 class TestScreen:
     def __init__(self):
@@ -34,8 +35,8 @@ class TestScreen:
                         Choice("T 过码自动测试 (使用bili_ticket_gt_python)", data="auto"),
                         Choice("M 过码手动测试 (已弃用)", data="manual"),
                         Choice("I 输入文本测试", data="input"),
-                        Choice("S 目录弹出测试", data="open"),
-                        Choice("P 图片保存测试", data="image"),
+                        Choice("P 图片弹出测试", data="image"),
+                        Choice("N 推送通知测试", data="push"),
                         Choice("← 返回", data="back"),
                     ],
                 ).prompt()
@@ -50,10 +51,10 @@ class TestScreen:
                 self._manual_test()
             elif _.data == "input":
                 self._input_test()
-            elif _.data == "open":
-                self._open_test()
             elif _.data == "image":
                 self._image_test()
+            elif _.data == "push":
+                self._push_test()
 
     def _auto_test(self):
         """自动测试验证码过码"""
@@ -157,11 +158,7 @@ class TestScreen:
         logger.info("部分 Windows 用户如遇不能粘贴问题, 请使用 Ctrl+V 粘贴, 或通过 顶部菜单栏->编辑->粘贴 完成")
         text = InputPrompt("请输入文本: ").prompt()
         logger.info(f"输入文本: {text}")
-
-    def _open_test(self):
-        """目录弹出测试"""
-        logger.info("开始目录弹出测试...")
-        file_utils.open_folder(".")
+        
 
     def _image_test(self):
         """图片保存测试"""
@@ -170,8 +167,10 @@ class TestScreen:
         try:
             # 创建一个简单的彩色渐变测试图像
             width, height = 320, 240
-            image_data = self._generate_test_image(width, height)
-            
+            def _generate_test_image(width, height):
+                # 不使用 PIL 生成图片, 因为 PIL 在某些情况下会触发奇怪的 bug
+                return b"".join([bytes([i % 256 for i in range(width)]) for _ in range(height)])
+            image_data = _generate_test_image(width, height)
             # 保存图片并打开文件夹
             logger.info(f"正在保存 {width}x{height} 测试图片...")
             file_path = file_utils.save_image_and_open_folder(image_data, "test_image")
@@ -180,71 +179,56 @@ class TestScreen:
                 logger.success(f"测试图片已保存: {file_path}")
             else:
                 logger.error("保存测试图片失败")
-                
+            # 等待用户确认
+            # 使用 noneprompt
+            input = InputPrompt("按下回车释放缓存").prompt()
         except Exception as e:
             logger.error(f"图片测试过程中发生异常: {e}")
             logger.debug(traceback.format_exc())
-            
-    def _generate_test_image(self, width=320, height=240):
-        """生成一个简单的彩色渐变测试图像
+        finally:
+            # 释放缓存图片
+            file_utils.clean_temp_files("test_image")
+
+
+    def _push_test(self):
+        """推送通知测试"""
+        logger.info("开始推送通知测试...")
         
-        返回:
-        -----
-        bytes
-            PNG格式的图像数据
-        """
+        # 获取所有配置
+        configs = push_manager.get_configs()
+        
+        if not configs:
+            logger.warning("没有找到推送配置，请先添加配置")
+            return
+        
         try:
-            # 尝试使用PIL库创建一个彩色渐变图像
-            from PIL import Image
+            # 构建选择菜单
+            choices = [Choice(f"【{c.provider.capitalize()}】{c.name}", data=c) for c in configs]
+            choices.append(Choice("← 返回", data="back"))
             
-            # 创建一个彩色渐变图像
-            image = Image.new('RGB', (width, height))
-            pixels = image.load()
-            
-            for i in range(width):
-                for j in range(height):
-                    r = int(255 * i / width)
-                    g = int(255 * j / height)
-                    b = int(255 * (i + j) / (width + height))
-                    pixels[i, j] = (r, g, b)
-            
-            # 将图像转换为字节
-            img_bytes = io.BytesIO()
-            image.save(img_bytes, format='PNG')
-            return img_bytes.getvalue()
-            
-        except ImportError:
-            # 如果没有PIL库，创建一个简单的彩色矩形
-            logger.warning("未安装PIL库，将生成简单的替代图像")
-            
-            # 创建一个简单的彩色矩形PNG图像
-            # PNG头部和必要的块
-            png_data = bytearray([
-                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG签名
-                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR块
-                (width >> 24) & 0xFF, (width >> 16) & 0xFF, (width >> 8) & 0xFF, width & 0xFF,  # 宽度
-                (height >> 24) & 0xFF, (height >> 16) & 0xFF, (height >> 8) & 0xFF, height & 0xFF,  # 高度
-                0x08, 0x02, 0x00, 0x00, 0x00  # 颜色深度等
-            ])
-            
-            # 添加简单数据
-            data_size = width * height * 3
-            png_data.extend([
-                0x00, 0x00, 0x00, 0x00, 0x49, 0x44, 0x41, 0x54,  # IDAT块
-                0x78, 0x9C, 0x63, 0x60  # 一些压缩数据
-            ])
-            
-            # 简单填充一些数据
-            for i in range(min(100, data_size)):
-                png_data.append(i % 256)
+            # 选择配置
+            action = ListPrompt("请选择要测试的推送配置:", choices=choices).prompt()
+            if action.data == "back":
+                return
                 
-            # 添加结束标记
-            png_data.extend([
-                0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82  # IEND块
-            ])
+            # 发送测试消息
+            config = action.data
+            title = "测试通知"
+            content = f"这是来自 kumo-s-hyg 的测试消息，发送时间: {time.strftime('%Y-%m-%d %H:%M:%S')}"
             
-            return bytes(png_data)
-
-
+            logger.info(f"正在向【{config.provider.capitalize()}】{config.name} 发送测试消息...")
+            result = push_manager.push(title, content, config.config_id)
             
-            
+            # 显示结果
+            if config.name in result and result[config.name]["success"]:
+                logger.success("推送成功!")
+            else:
+                msg = result.get(config.name, {}).get("message", "未知错误")
+                logger.error(f"推送失败: {msg}")
+        except CancelledError:
+            pass
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error(f"推送测试失败: {e}")
+            logger.debug(traceback.format_exc())

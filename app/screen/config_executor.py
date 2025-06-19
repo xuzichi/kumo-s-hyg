@@ -36,7 +36,7 @@ class ConfigExecutor:
                     choices=[
                         Choice("▶ 运行", data="run"),
                         Choice("▶ 运行 (anyway)", data="run_anyway"),
-                        Choice("✎ 编辑", data="edit"),
+                        Choice("I 编辑", data="edit"),
                         Choice("C 拷贝", data="copy"),
                         Choice("D 删除", data="delete"),
                         Choice("← 返回", data="back"),

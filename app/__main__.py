@@ -7,7 +7,7 @@ from .utils.file_utils import file_utils
 from app.screen import Main
 from .client import Client
 
-__versions__ = "0.5.6"
+__versions__ = "0.5.7"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -35,7 +35,6 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         logger.opt(colors=True).info(f'We1c0me <green>khyg</green> v{__versions__}')
         
         # 程序启动时清理旧的临时文件
-        logger.debug("清理旧的临时文件...")
         cleared_qr = file_utils.clean_temp_files("bilibili_login_qr")
         cleared_captcha = file_utils.clean_temp_files("gaia_captcha")
         if cleared_qr > 0 or cleared_captcha > 0:

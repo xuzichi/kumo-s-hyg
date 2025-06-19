@@ -1,4 +1,5 @@
 from ..utils.log import logger
+import re
 from noneprompt import (
     ListPrompt,
     Choice,
@@ -6,7 +7,7 @@ from noneprompt import (
     InputPrompt,
 )
 
-from app.utils.push_manager import push_manager, PushplusConfig, BarkConfig
+from app.utils.push_manager import push_manager, BarkConfig, NtfyConfig
 
 
 class PushScreen:
@@ -28,72 +29,100 @@ class PushScreen:
                 elif action.data == "back":
                     break
                 else:
-                    self.show_config_menu(action.data)
-
-            except (CancelledError, KeyboardInterrupt):
+                    # 操作已有配置
+                    self.manage_config(action.data)
+            except CancelledError:
                 break
-
-    def show_config_menu(self, config):
-        action = ListPrompt(
-            f"操作配置: 【{config.provider.capitalize()}】{config.name}",
-            choices=[
-                Choice("删除", data="delete"),
-                Choice("← 返回", data="back"),
-            ],
-        ).prompt()
-
-        if action.data == "delete":
-            self.manager.delete_config(config.config_id)
 
     def create_new_config(self):
-        provider_action = ListPrompt(
-            "请选择推送服务提供商:",
-            choices=[
-                Choice("Pushplus (微信推送)", data="pushplus"),
-                Choice("Bark (iOS 推送)", data="bark"),
+        """创建新的推送配置"""
+        try:
+            provider_choices = [
+                Choice("Bark", data="bark"),
+                Choice("Ntfy", data="ntfy"),
                 Choice("← 返回", data="back"),
-            ],
-        ).prompt()
+            ]
+            provider = ListPrompt("请选择推送服务:", choices=provider_choices).prompt()
 
-        provider = provider_action.data
-        if provider == "back":
-            return
+            if provider.data == "back":
+                return
 
-        # 为新配置生成一个默认名称，如 "Bark", "Bark 2"
-        all_configs = self.manager.get_configs()
-        existing_names = {c.name for c in all_configs}
-        base_name = provider.capitalize()
-        default_name = base_name
-        counter = 2
-        while default_name in existing_names:
-            default_name = f"{base_name} {counter}"
-            counter += 1
+            # 公共字段
+            name = InputPrompt("请输入配置名称:", default_text=provider.data).prompt()
 
-        name = InputPrompt("请输入配置名称:", default_text=default_name).prompt() or default_name
+            if provider.data == "bark":
+                url = InputPrompt("请输入 Bark URL (例如: https://api.day.app/your_key):").prompt()
+                config = BarkConfig(name=name, url=url)
+                self.manager.add_config(config)
+                logger.success("Bark 配置已添加")
+            elif provider.data == "ntfy":
+                server_url = InputPrompt(
+                    "请输入完整的 Ntfy URL (例如: https://ntfy.sh/yourtopic):"
+                ).prompt()
+                config = NtfyConfig(name=name, server_url=server_url)
+                self.manager.add_config(config)
+                logger.success("Ntfy 配置已添加")
 
-        if provider == "pushplus":
-            logger.warning("Pushplus 推送服务好像要实名认证懒得搞了, 有人测试好给我 pr 一下得了")
-            return
-            # while True:
-            #     token = InputPrompt("请输入 Pushplus 的 Token:").prompt()
-            #     if not token:
-            #         print("Token 不能为空，请重新输入")
-            #         continue
-            #     break
-            # config = PushplusConfig(name=name, token=token)
-        elif provider == "bark":
-            while True:
-                url = InputPrompt("请输入 Bark 的 URL (例如: https://api.day.app/your_key):").prompt()
-                if not url:
-                    logger.warning("URL 不能为空，请重新输入")
-                    continue
-                # 自动清理 Bark URL 中的示例推送内容
-                placeholder = "这里改成你自己的推送内容"
-                if placeholder in url:
-                    url = url.split(placeholder)[0].rstrip("/")
+        except CancelledError:
+            pass
+
+    def manage_config(self, config):
+        """管理已有的推送配置"""
+        while True:
+            try:
+                choices = [
+                    Choice("I 编辑", data="edit"),
+                    Choice("D 删除", data="delete"),
+                    Choice("← 返回", data="back"),
+                ]
+                action = ListPrompt(f"管理推送配置 '{config.name}':", choices=choices).prompt()
+
+                if action.data == "edit":
+                    self.edit_config(config)
+                elif action.data == "delete":
+                    self.delete_config(config)
+                    break  # 删除后返回上一级
+                elif action.data == "back":
+                    break
+            except CancelledError:
                 break
-            config = BarkConfig(name=name, url=url)
-        else:
-            return
 
-        self.manager.save_config(config) 
+    def edit_config(self, config):
+        """编辑推送配置"""
+        try:
+            new_name = InputPrompt("请输入新的配置名称:", default=config.name).prompt()
+            
+            if isinstance(config, BarkConfig):
+                new_url = InputPrompt(
+                    "请输入新的 Bark URL:", default=config.url
+                ).prompt()
+                config.name = new_name
+                config.url = new_url
+                self.manager.update_config(config)
+                logger.success("Bark 配置已更新")
+            elif isinstance(config, NtfyConfig):
+                new_server_url = InputPrompt(
+                    "请输入新的完整 Ntfy URL:", default=config.server_url
+                ).prompt()
+                config.name = new_name
+                config.server_url = new_server_url
+                self.manager.update_config(config)
+                logger.success("Ntfy 配置已更新")
+        except CancelledError:
+            pass
+
+    def delete_config(self, config):
+        """删除推送配置"""
+        try:
+            confirm_choices = [
+                Choice("确认删除", data="confirm"),
+                Choice("取消", data="cancel"),
+            ]
+            confirm = ListPrompt(
+                f"确认要删除推送配置 '{config.name}' 吗?", choices=confirm_choices
+            ).prompt()
+            if confirm.data == "confirm":
+                self.manager.delete_config(config.config_id)
+                logger.success(f"推送配置 '{config.name}' 已删除")
+        except CancelledError:
+            pass
