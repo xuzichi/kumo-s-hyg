@@ -46,8 +46,8 @@ class AccountScreen:
                     f"{p['username']} (最后登录 {time.strftime('%Y-%m-%d %H:%M', time.localtime(p['last_login']))})",
                     data=("use", p['user_id'])
                 ) for p in profiles),
-                Choice("+ 新增账号", data=("add", None)),
-                Choice("- 删除账号", data=("delete", None)) if profiles else None,
+                Choice("+ 新增账号", data=("add_account", None)),
+                Choice("- 删除账号", data=("delete_account", None)) if profiles else None,
                 Choice("← 取消", data=("cancel", None)),
             ]
             choices = [c for c in choices if c is not None]
@@ -69,12 +69,12 @@ class AccountScreen:
                 logger.success(f"已选择账号: {account.username}")
                 return account.cookie
 
-            if action == "add":
+            if action == "add_account":
                 cookie = self._login_new_account()
                 if cookie:
                     return cookie
 
-            if action == "delete":
+            if action == "delete_account":
                 self._delete_account()
 
             if action == "cancel":

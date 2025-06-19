@@ -17,7 +17,9 @@ class PushScreen:
     def run(self):
         while True:
             configs = self.manager.get_configs()
-            choices = [Choice(f"【{c.provider.capitalize()}】{c.name}", data=c) for c in configs]
+            choices = []
+            for c in configs:
+                choices.append(Choice(f"[{c.provider.capitalize()}] {c.name}", data=c))
             choices.append(Choice("+ 新建配置", data="new"))
             choices.append(Choice("← 返回", data="back"))
 
@@ -26,6 +28,8 @@ class PushScreen:
 
                 if action.data == "new":
                     self.create_new_config()
+                elif action.data == "no_config":
+                    break
                 elif action.data == "back":
                     break
                 else:
@@ -71,45 +75,18 @@ class PushScreen:
         while True:
             try:
                 choices = [
-                    Choice("I 编辑", data="edit"),
                     Choice("D 删除", data="delete"),
                     Choice("← 返回", data="back"),
                 ]
                 action = ListPrompt(f"管理推送配置 '{config.name}':", choices=choices).prompt()
 
-                if action.data == "edit":
-                    self.edit_config(config)
-                elif action.data == "delete":
+                if action.data == "delete":
                     self.delete_config(config)
                     break  # 删除后返回上一级
                 elif action.data == "back":
                     break
             except CancelledError:
                 break
-
-    def edit_config(self, config):
-        """编辑推送配置"""
-        try:
-            new_name = InputPrompt("请输入新的配置名称:", default=config.name).prompt()
-            
-            if isinstance(config, BarkConfig):
-                new_url = InputPrompt(
-                    "请输入新的 Bark URL:", default=config.url
-                ).prompt()
-                config.name = new_name
-                config.url = new_url
-                self.manager.update_config(config)
-                logger.success("Bark 配置已更新")
-            elif isinstance(config, NtfyConfig):
-                new_server_url = InputPrompt(
-                    "请输入新的完整 Ntfy URL:", default=config.server_url
-                ).prompt()
-                config.name = new_name
-                config.server_url = new_server_url
-                self.manager.update_config(config)
-                logger.success("Ntfy 配置已更新")
-        except CancelledError:
-            pass
 
     def delete_config(self, config):
         """删除推送配置"""

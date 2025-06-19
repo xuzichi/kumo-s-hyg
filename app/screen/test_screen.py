@@ -223,7 +223,7 @@ class TestScreen:
 
     def _push_test(self):
         """推送通知测试"""
-        logger.info("开始推送通知测试...")
+        logger.info("实际运行时, 重要通知会同时推送到所有配置")
         
         # 获取所有配置
         configs = push_manager.get_configs()
@@ -234,7 +234,10 @@ class TestScreen:
         
         try:
             # 构建选择菜单
-            choices = [Choice(f"【{c.provider.capitalize()}】{c.name}", data=c) for c in configs]
+            choices = []
+            # choices = [Choice(f"【{c.provider.capitalize()}】{c.name}", data=c) for c in configs]
+            for c in configs:
+                choices.append(Choice(f"[{c.provider.capitalize()}] {c.name}", data=c))
             choices.append(Choice("← 返回", data="back"))
             
             # 选择配置

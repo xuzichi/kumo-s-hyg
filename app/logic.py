@@ -64,9 +64,8 @@ class Logic():
     def __init__(self, order: Order, config: dict) -> None:
         self.order = order 
         self.config =  config
-        
-        self.wait_invoice = config.get("wait_invoice", False)
         self.interval = 0.9  # 全局尝试订单请求间隔, 0.9 是测试下来最稳定的间隔不触发 '前方拥堵' 的间隔
+        self.push_manager = push_manager
     
     def run(self):
         try:                        
@@ -101,7 +100,7 @@ class Logic():
                         if create_status["errno"] == 0:
                             logger.success('购票成功! 请尽快打开订单界面支付!')
                             # 推送
-                            push_manager.push(title="[khyg] 购票成功", content=f"请在10分钟内打开订单界面支付!")
+                            self.push_manager.push("[khyg] 购票成功", f"请在10分钟内打开订单界面支付!")
                             break
                         else:
                             logger.error(f"假票, 请重新下单.")
@@ -147,7 +146,7 @@ class Logic():
                         continue
                     elif error_code in [100003, 100079, 100016, 100039, 100048]:
                         logger.warning(f"{error_msg}")
-                        push_manager.push(title="[khyg] 购票失败", content=f"{error_msg}")
+                        self.push_manager.push("[khyg] 购票失败", f"{error_msg}")
                         break  # 项目相关错误，直接退出
                     
                     elif error_code in [3, 429, 100001, 100009, 219, 221, 900001, -509, -799]:
@@ -158,22 +157,6 @@ class Logic():
                         else:
                             logger.info(f"{error_msg}")
                         continue
-                    # elif error_code == -401:
-                    #     logger.warning(f"{error_msg} - 可能触发了风控验证")
-                    #     logger.info("尝试刷新bili_ticket以降低风控概率...")
-                        
-                    #     # 尝试刷新bili_ticket并强制更新
-                    #     try:
-                    #         self.order.client.ensure_bili_ticket(force_refresh=True)
-                    #         logger.info("bili_ticket刷新成功，重试中...")
-                    #     except Exception as e:
-                    #         logger.warning(f"刷新bili_ticket失败: {e}")
-                            
-                    #     # 等待一段时间后重试
-                    #     logger.info(f"等待 20 秒后重试...")
-                    #     time.sleep(20)
-                    #     order_attempt = 0  # 重置计数器
-                    #     continue
                     else:
                         # 未知错误或不可重试错误
                         logger.error(error_msg)

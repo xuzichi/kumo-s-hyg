@@ -24,6 +24,7 @@ from ..client import Client
 # 新增：账号管理
 from .account_screen import AccountScreen
 from app.utils import account_manager as am
+from app.utils.push_manager import push_manager
 
 
 class ConfigBuilder:
@@ -293,7 +294,6 @@ class ConfigBuilder:
         
         # 插入账号ID
         config_str += f"\n\naccount_id: {self.selected_account_id}"
-        
         return config_str
 
     def _handle_buyer_and_address(self, project_json, selected_ticket_info):

@@ -22,8 +22,8 @@ from ..client import Client
 from .config_builder import ConfigBuilder
 from app.utils import account_manager
 from .config_executor import ConfigExecutor
-from .push_screen import PushScreen
 from .test_screen import TestScreen
+from .push_screen import PushScreen
 
 
 class Main:
@@ -54,7 +54,7 @@ class Main:
                 choices.append(Choice("暂无配置文件，请先生成配置", data="no_config"))
             
             choices.append(Choice("+ 新建配置", data="new"))
-            choices.append(Choice("! 推送管理", data="push"))
+            choices.append(Choice("P 推送管理", data="push"))
             choices.append(Choice("# 功能测试", data="test"))
             choices.append(Choice("← 退出", data="exit"))
             

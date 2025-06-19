@@ -21,6 +21,7 @@ from ..utils.log import logger
 from .. import client
 from .config_builder import ConfigBuilder
 from app.utils import account_manager
+from app.utils.push_manager import push_manager
 
 
 class ConfigExecutor:
@@ -146,11 +147,11 @@ class ConfigExecutor:
             current_str = current_dt.strftime("%H:%M:%S")
             
             if remaining_seconds <= 60:
-                logger.opt(colors=True).info(f"<red>⏰ {current_str} | 倒计时: {time_str}</red>")
+                logger.opt(colors=True).info(f"<red>T: {current_str} | 倒计时: {time_str}</red>")
             elif remaining_seconds <= 300:
-                logger.opt(colors=True).info(f"<yellow>⏰ {current_str} | 剩余: {time_str}</yellow>")
+                logger.opt(colors=True).info(f"<yellow>T: {current_str} | 剩余: {time_str}</yellow>")
             else:
-                logger.opt(colors=True).info(f"<cyan>⏰ {current_str} | 剩余: {time_str}</cyan>")
+                logger.opt(colors=True).info(f"<cyan>T: {current_str} | 剩余: {time_str}</cyan>")
             
             # 等待间隔：剩余时间越短，更新越频繁
             if remaining_seconds <= 5:
@@ -233,7 +234,7 @@ class ConfigExecutor:
                                     logger.opt(colors=True).info(
                                         f'记名信息: {addr["name"]} {addr["phone"]}'
                                     )
-
+                        
                     # 打印购票人信息（如果有）
                     if "buyer_index" in config and config["buyer_index"]:
                         buyer_json = self.client.api.buyer()
@@ -242,8 +243,16 @@ class ConfigExecutor:
                                 buyer = buyer_json["data"]["list"][buyer_idx]
                                 masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
                                 logger.opt(colors=True).info(
-                                    f'购票人: {buyer["name"]} {masked_id}'
+                                    f'购票人{buyer_idx+1} : {buyer["name"]} {masked_id}'
                                 )
+                                
+                    # 打印推送全局所有配置
+                    push_configs = push_manager.get_configs()
+                    if push_configs:
+                        for push_config in push_configs:
+                            logger.opt(colors=True).info(f"推送配置: [{push_config.provider.capitalize()}] {push_config.name}")
+                    else:
+                        logger.opt(colors=True).info("推送配置: 无")
 
                     # 打印购票数量（非实名制）
                     if "count" in config:
@@ -253,7 +262,8 @@ class ConfigExecutor:
                     logger.opt(colors=True).info("<cyan>即将开始抢票...</cyan>")
 
                 except Exception as e:
-                    logger.error("读取配置文件失败, 请检查配置文件格式")
+                    logger.error("读取配置文件失败, 请检查配置文件格式, 或依赖的子配置是否变更")
+                    logger.error('可尝试使用 "编辑" 功能重制配置文件')
                     import traceback
 
                     logger.debug(traceback.format_exc())
