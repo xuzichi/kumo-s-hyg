@@ -168,11 +168,43 @@ class TestScreen:
             # 创建一个简单的彩色渐变测试图像
             width, height = 320, 240
             def _generate_test_image(width, height):
-                # 不使用 PIL 生成图片, 因为 PIL 在某些情况下会触发奇怪的 bug
-                return b"".join([bytes([i % 256 for i in range(width)]) for _ in range(height)])
+                # 生成一个带彩色渐变的测试图片
+                # 使用 io.BytesIO 和简单的图片数据生成
+                import struct
+                
+                # PNG 文件头
+                png_signature = b'\x89PNG\r\n\x1a\n'
+                
+                # IHDR chunk (图片头信息)
+                ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)  # RGB, 8bit
+                ihdr_crc = __import__('zlib').crc32(b'IHDR' + ihdr_data) & 0xffffffff
+                ihdr_chunk = struct.pack('>I', len(ihdr_data)) + b'IHDR' + ihdr_data + struct.pack('>I', ihdr_crc)
+                
+                # 图片数据 (简单的彩色渐变)
+                image_data = bytearray()
+                for y in range(height):
+                    image_data.append(0)  # 每行开始的过滤器类型
+                    for x in range(width):
+                        # 简单的彩色渐变: 红色从左到右渐变，绿色从上到下渐变
+                        r = int((x / width) * 255)
+                        g = int((y / height) * 255)
+                        b = 128  # 固定蓝色值
+                        image_data.extend([r, g, b])
+                
+                # 压缩图片数据
+                compressed_data = __import__('zlib').compress(bytes(image_data))
+                idat_crc = __import__('zlib').crc32(b'IDAT' + compressed_data) & 0xffffffff
+                idat_chunk = struct.pack('>I', len(compressed_data)) + b'IDAT' + compressed_data + struct.pack('>I', idat_crc)
+                
+                # IEND chunk (文件结束)
+                iend_crc = __import__('zlib').crc32(b'IEND') & 0xffffffff
+                iend_chunk = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+                
+                return png_signature + ihdr_chunk + idat_chunk + iend_chunk
+            
             image_data = _generate_test_image(width, height)
             # 保存图片并打开文件夹
-            logger.info(f"正在保存 {width}x{height} 测试图片...")
+            logger.info(f"正在保存 {width}x{height} 彩色渐变测试图片...")
             file_path = file_utils.save_image_and_open_folder(image_data, "test_image")
             
             if file_path:
@@ -183,7 +215,6 @@ class TestScreen:
             # 使用 noneprompt
             input = InputPrompt("按下回车释放缓存").prompt()
         except Exception as e:
-            logger.error(f"图片测试过程中发生异常: {e}")
             logger.debug(traceback.format_exc())
         finally:
             # 释放缓存图片

@@ -9,6 +9,7 @@ from pathlib import Path
 import segno
 from .log import logger
 from typing import Optional, List
+from .constants import BASE_TEMP_DIR
 
 
 class FileUtils:
@@ -63,9 +64,8 @@ class FileUtils:
             保存的文件路径，失败返回None
         """
         try:
-            # 创建temp目录
-            temp_dir = Path("temp")
-            temp_dir.mkdir(exist_ok=True)
+            # 使用全局临时目录
+            temp_dir = BASE_TEMP_DIR
             
             # 生成文件名
             timestamp = int(time.time())
@@ -105,9 +105,8 @@ class FileUtils:
             保存的文件路径，失败返回None
         """
         try:
-            # 创建temp目录
-            temp_dir = Path("temp")
-            temp_dir.mkdir(exist_ok=True)
+            # 使用全局临时目录
+            temp_dir = BASE_TEMP_DIR
             
             # 生成二维码文件名
             timestamp = int(time.time())
@@ -145,7 +144,9 @@ class FileUtils:
             清理的文件数量
         """
         try:
-            temp_dir = Path("temp")
+            # 使用全局临时目录
+            temp_dir = BASE_TEMP_DIR
+            
             if not temp_dir.exists():
                 return 0
             
