@@ -3,11 +3,11 @@ import os
 
 from noneprompt import CancelledError
 from .utils.log import init_log, logger
+from .utils.file_utils import file_utils
 from app.screen import Main
 from .client import Client
-# from .gaia import GaiaCaptchaManager  # 已删除
 
-__versions__ = "0.5.5"
+__versions__ = "0.5.6"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":
@@ -33,6 +33,14 @@ if __name__ == "__main__" or __name__ == "app.__main__":
         
     try:
         logger.opt(colors=True).info(f'We1c0me <green>khyg</green> v{__versions__}')
+        
+        # 程序启动时清理旧的临时文件
+        logger.debug("清理旧的临时文件...")
+        cleared_qr = file_utils.clean_temp_files("bilibili_login_qr")
+        cleared_captcha = file_utils.clean_temp_files("gaia_captcha")
+        if cleared_qr > 0 or cleared_captcha > 0:
+            logger.debug(f"已清理 {cleared_qr + cleared_captcha} 个临时文件")
+        
         # 如果没有 models 文件夹，提示用户等待初始化模型
         if not os.path.exists("models"):
             logger.warning("验证码模型初始化中...")

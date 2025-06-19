@@ -133,7 +133,7 @@ class ConfigBuilder:
     def _get_project_info(self, default_project_id=None):
         """获取项目信息"""
         while True:
-            logger.opt(colors=True).info("接下来, 请输入项目ID或搜索关键词, 例如 <green>98594</green> 或 <green>BML</green>")
+            logger.opt(colors=True).info("接下来, 请输入项目ID或搜索关键词, 例如 <green>102626</green> 或 <green>BML</green>")
             if default_project_id:
                 project_input = InputPrompt("请输入项目ID或搜索关键词:", default_text=str(default_project_id)).prompt()
             else:

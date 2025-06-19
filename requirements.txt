@@ -2,7 +2,6 @@
 requests
 noneprompt
 PyYAML
-qrcode
+segno
 loguru
-pillow
 bili_ticket_gt_python

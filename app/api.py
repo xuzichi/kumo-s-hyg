@@ -6,7 +6,6 @@ import ssl
 import threading
 import traceback
 from urllib.parse import urlencode
-import qrcode
 import requests
 from typing import Optional, List, Dict, TYPE_CHECKING
 from dataclasses import dataclass
@@ -21,6 +20,7 @@ import functools
 import bili_ticket_gt_python
 
 from .utils.log import logger
+from .utils.file_utils import file_utils
 from noneprompt import InputPrompt, CancelledError
 
 if TYPE_CHECKING:
@@ -506,17 +506,9 @@ class API:
                 logger.error("二维码信息缺失，无法继续登录")
                 return None
 
-            # 2. 生成并显示二维码
-            logger.info("请使用 B 站客户端扫码并确认登录 (有效期约 2 分钟)…")
-            qr = qrcode.QRCode(border=1)
-            qr.add_data(qr_url)
-            qr.make(fit=True)
-            
-            # 生成并弹出显示二维码
-            img = qr.make_image(fill_color="black", back_color="white")
-            img.show()
-            logger.info("二维码已弹出显示，请使用 B 站客户端扫描")
-
+            # 2. 生成并保存二维码到temp文件夹
+            file_utils.save_qr_and_open_folder(qr_url, "bilibili_login_qr")
+            logger.info("请使用 B 站客户端扫码并确认登录")
             # 3. 轮询扫码状态
             poll_url = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll"
             start_time = time.time()
@@ -575,6 +567,9 @@ class API:
             logger.error(f"扫码登录异常: {e}")
             logger.debug(traceback.format_exc())
             return None
+        finally:
+            # 无论如何退出都清理二维码文件
+            file_utils.clean_temp_files("bilibili_login_qr")
 
     def generate_click_position(self):
         """生成随机点击位置，用于模拟真实用户点击

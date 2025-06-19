@@ -6,7 +6,7 @@ import ssl
 import threading
 import traceback
 from urllib.parse import urlencode
-import qrcode
+
 import requests
 from typing import Optional, List, Dict
 import json

@@ -108,7 +108,7 @@ class AccountScreen:
                 logger.info("正在请求二维码...")
                 cookie = self.client.api.qr_login()
                 if not cookie:
-                    logger.error("扫码登录失败，请重试或使用其他方式。")
+                    logger.warning("扫码登录终止")
                     continue
                 if cookie:
                     logger.info("准备获取账号验证ticket...")

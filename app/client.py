@@ -6,7 +6,6 @@ import ssl
 import threading
 import traceback
 from urllib.parse import urlencode
-import qrcode
 import requests
 from typing import Optional, List, Dict, TYPE_CHECKING
 from dataclasses import dataclass
@@ -17,12 +16,12 @@ import struct
 import re
 import urllib.parse
 import hmac
-from PIL import Image
 import io, base64
 
 from app.utils.virtual_device import create_virtual_device
 
 from .utils.log import logger
+from .utils.file_utils import file_utils
 from noneprompt import CancelledError, InputPrompt, ConfirmPrompt
 from .api import API
 import yaml
@@ -445,14 +444,14 @@ class Client:
                 return False
             else:
                 try:
-                    from PIL import Image
-                    import io
                     import base64
+                    
                     img_base64 = img_resp["data"]["img"]
                     logger.debug("GAIA Img: " + img_base64)
+                    
+                    # 使用工具类保存验证码图片并打开文件夹
                     img_data = base64.b64decode(img_base64)
-                    img = Image.open(io.BytesIO(img_data))
-                    img.show()
+                    file_utils.save_image_and_open_folder(img_data, "gaia_captcha")
                     
                     img_verify = InputPrompt("请输入图形验证码: ").prompt()
                     
@@ -475,6 +474,9 @@ class Client:
                 except Exception as e:
                     logger.error(f"处理图形验证码异常: {e}")
                     return False
+                finally:
+                    # 无论如何退出都清理验证码文件
+                    file_utils.clean_temp_files("gaia_captcha")
         elif captcha_type == "sms":
             logger.debug("GAIA Type: SMS")
             resp = self._make_api_call(
