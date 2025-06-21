@@ -243,9 +243,12 @@ class ConfigExecutor:
                                 buyer = buyer_json["data"]["list"][buyer_idx]
                                 masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
                                 logger.opt(colors=True).info(
-                                    f'购票人{buyer_idx+1} : {buyer["name"]} {masked_id}'
+                                    f'购票人  : {buyer["name"]} {masked_id}'
                                 )
-                                
+                                logger.debug(
+                                    f'购票人详细: {buyer["name"]} {buyer["personal_id"]}'
+                                )
+
                     # 打印推送全局所有配置
                     push_configs = push_manager.get_configs()
                     if push_configs:
