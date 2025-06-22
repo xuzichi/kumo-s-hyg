@@ -18,18 +18,126 @@ from noneprompt import (
 from app.logic import Logic
 from app.order import Order
 from ..utils.log import logger
-from .. import client
+from ..client import Client
 from .config_builder import ConfigBuilder
 from app.utils import account_manager
 from app.utils.push_manager import push_manager
 
 
 class ConfigExecutor:
-    def __init__(self, client: client):
+    def __init__(self, client: Client):
         self.client = client
 
     def show_config_menu(self, config_path: Path):
         """展示针对单个配置文件的操作选单"""
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"读取配置文件失败: {e}")
+            return
+        aid = str(config["account_id"]) if "account_id" in config else None
+        account = account_manager.get_account(aid) if aid else None
+        if not account:
+            logger.error("配置文件中未找到有效 account_id, 或对应账号不存在")
+            return
+        # 绑定 Cookie 与设备
+        self.client.load_cookie(account.cookie)
+        self.client.set_device(account.device)
+        try:
+            self.client.api.ensure_bili_ticket()
+            # 获取当前用户信息
+            my_info_json = self.client.api.my_info()
+            logger.opt(colors=True).debug(f'当前用户信息: {my_info_json}')
+            logger.opt(colors=True).info(f'当前用户: {my_info_json["data"]["profile"]["name"]}')
+        except Exception as e:
+            logger.error(f"获取用户信息失败: {e}")
+            logger.debug(traceback.format_exc())
+            return
+        try:
+            # 获取项目信息以获取演出名称
+            project_json = self.client.api.project(project_id=config["project_id"])
+
+            # 获取账号信息
+            aid = str(config["account_id"]) if "account_id" in config else None
+            account = account_manager.get_account(aid) if aid else None
+
+            # 打印配置摘要信息
+            logger.opt(colors=True).info("─" * 50)
+            logger.opt(colors=True).info(f"<cyan>【配置摘要】</cyan>")
+            logger.opt(colors=True).info(f"项目名称: {project_json['data']['name']}")
+            logger.opt(colors=True).info(f"虚拟设备: {account.device.device_name if account else '未知设备'}")
+            logger.opt(colors=True).info(f"登录用户: {account.username if account else '未知用户'}")
+
+            # 打印票种信息
+            if "screen_ticket" in config and config["screen_ticket"]:
+                for ticket_info in config["screen_ticket"]:
+                    screen_idx, ticket_idx = ticket_info
+                    if screen_idx < len(
+                        project_json["data"]["screen_list"]
+                    ) and ticket_idx < len(
+                        project_json["data"]["screen_list"][screen_idx][
+                            "ticket_list"
+                        ]
+                    ):
+                        screen = project_json["data"]["screen_list"][screen_idx]
+                        ticket = screen["ticket_list"][ticket_idx]
+                        price_yuan = ticket["price"] / 100
+                        logger.opt(colors=True).info(
+                            f'选择票种: {screen["name"]} {ticket["desc"]} {price_yuan}元'
+                        )
+
+            # 打印地址信息（如果有）
+            if "address_index" in config and config["address_index"]:
+                address_json = self.client.api.address()
+                for addr_idx in config["address_index"]:
+                    if addr_idx < len(address_json["data"]["addr_list"]):
+                        addr = address_json["data"]["addr_list"][addr_idx]
+                        if project_json["data"].get("has_paper_ticket", False):
+                            logger.opt(colors=True).info(
+                                f'收货地址: {addr["name"]} {addr["phone"]} {addr["prov"]}{addr["city"]}{addr["area"]}{addr["addr"]}'
+                            )
+                        else:
+                            logger.opt(colors=True).info(
+                                f'记名信息: {addr["name"]} {addr["phone"]}'
+                            )
+                
+            # 打印购票人信息（如果有）
+            if "buyer_index" in config and config["buyer_index"]:
+                buyer_json = self.client.api.buyer()
+                for buyer_idx in config["buyer_index"]:
+                    if buyer_idx < len(buyer_json["data"]["list"]):
+                        buyer = buyer_json["data"]["list"][buyer_idx]
+                        masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
+                        logger.opt(colors=True).info(
+                            f'购票人  : {buyer["name"]} {masked_id}'
+                        )
+                        # logger.debug(
+                        #     f'购票人详细: {buyer["name"]} {buyer["personal_id"]}'
+                        # )
+
+            # 打印推送全局所有配置
+            push_configs = push_manager.get_configs()
+            if push_configs:
+                for push_config in push_configs:
+                    logger.opt(colors=True).info(f"推送配置: [{push_config.provider.capitalize()}] {push_config.name}")
+            else:
+                logger.opt(colors=True).info("推送配置: 无")
+
+            # 打印购票数量（非实名制）
+            if "count" in config:
+                logger.opt(colors=True).info(f"购票数量: {config['count']}张")
+
+            logger.opt(colors=True).info("─" * 50)
+            # logger.opt(colors=True).info("<cyan>即将开始抢票...</cyan>")
+
+        except Exception as e:
+            logger.error("读取配置文件失败, 请检查配置文件格式, 或依赖的子配置是否变更")
+            logger.error('可尝试使用 "编辑" 功能重制配置文件')
+            import traceback
+
+            logger.debug(traceback.format_exc())
+            return
         while True:
             try:
                 choice = ListPrompt(
@@ -171,127 +279,25 @@ class ConfigExecutor:
         with open(config_name, "r", encoding="utf-8") as f:
             try:
                 config = yaml.safe_load(f)
-                aid = str(config["account_id"]) if "account_id" in config else None
-                account = account_manager.get_account(aid) if aid else None
-                if not account:
-                    logger.error("配置文件中未找到有效 account_id, 或对应账号不存在")
-                    return
-                # 绑定 Cookie 与设备
-                self.client.load_cookie(account.cookie)
-                self.client.set_device(account.device)
-                
-                # 准备阶段：检查账号状态和获取必要信息
-                try:
-                    self.client.api.ensure_bili_ticket()
-                    
-                    # 获取当前用户信息
-                    my_info_json = self.client.api.my_info()
-                    logger.opt(colors=True).info(f'当前用户: {my_info_json["data"]["profile"]["name"]}')
-                    
-                except Exception as e:
-                    logger.error(f"获取用户信息失败: {e}")
-                    return
-                
-                try:
-                    # 获取项目信息以获取演出名称
-                    project_json = self.client.api.project(project_id=config["project_id"])
-
-                    # 打印配置摘要信息
-                    logger.opt(colors=True).info("─" * 50)
-                    logger.opt(colors=True).info(f"<cyan>【配置摘要】</cyan>")
-                    logger.opt(colors=True).info(f"项目名称: {project_json['data']['name']}")
-                    logger.opt(colors=True).info(f"虚拟设备: {account.device.device_name if account else '未知设备'}")
-                    logger.opt(colors=True).info(f"登录用户: {account.username if account else '未知用户'}")
-
-                    # 打印票种信息
-                    if "screen_ticket" in config and config["screen_ticket"]:
-                        for ticket_info in config["screen_ticket"]:
-                            screen_idx, ticket_idx = ticket_info
-                            if screen_idx < len(
-                                project_json["data"]["screen_list"]
-                            ) and ticket_idx < len(
-                                project_json["data"]["screen_list"][screen_idx][
-                                    "ticket_list"
-                                ]
-                            ):
-                                screen = project_json["data"]["screen_list"][screen_idx]
-                                ticket = screen["ticket_list"][ticket_idx]
-                                price_yuan = ticket["price"] / 100
-                                logger.opt(colors=True).info(
-                                    f'选择票种: {screen["name"]} {ticket["desc"]} {price_yuan}元'
-                                )
-
-                    # 打印地址信息（如果有）
-                    if "address_index" in config and config["address_index"]:
-                        address_json = self.client.api.address()
-                        for addr_idx in config["address_index"]:
-                            if addr_idx < len(address_json["data"]["addr_list"]):
-                                addr = address_json["data"]["addr_list"][addr_idx]
-                                if project_json["data"].get("has_paper_ticket", False):
-                                    logger.opt(colors=True).info(
-                                        f'收货地址: {addr["name"]} {addr["phone"]} {addr["prov"]}{addr["city"]}{addr["area"]}{addr["addr"]}'
-                                    )
-                                else:
-                                    logger.opt(colors=True).info(
-                                        f'记名信息: {addr["name"]} {addr["phone"]}'
-                                    )
-                        
-                    # 打印购票人信息（如果有）
-                    if "buyer_index" in config and config["buyer_index"]:
-                        buyer_json = self.client.api.buyer()
-                        for buyer_idx in config["buyer_index"]:
-                            if buyer_idx < len(buyer_json["data"]["list"]):
-                                buyer = buyer_json["data"]["list"][buyer_idx]
-                                masked_id = f"{buyer['personal_id'][0:2]}*************{buyer['personal_id'][-1:]}"
-                                logger.opt(colors=True).info(
-                                    f'购票人  : {buyer["name"]} {masked_id}'
-                                )
-                                logger.debug(
-                                    f'购票人详细: {buyer["name"]} {buyer["personal_id"]}'
-                                )
-
-                    # 打印推送全局所有配置
-                    push_configs = push_manager.get_configs()
-                    if push_configs:
-                        for push_config in push_configs:
-                            logger.opt(colors=True).info(f"推送配置: [{push_config.provider.capitalize()}] {push_config.name}")
-                    else:
-                        logger.opt(colors=True).info("推送配置: 无")
-
-                    # 打印购票数量（非实名制）
-                    if "count" in config:
-                        logger.opt(colors=True).info(f"购票数量: {config['count']}张")
-
-                    logger.opt(colors=True).info("─" * 50)
-                    logger.opt(colors=True).info("<cyan>即将开始抢票...</cyan>")
-
-                except Exception as e:
-                    logger.error("读取配置文件失败, 请检查配置文件格式, 或依赖的子配置是否变更")
-                    logger.error('可尝试使用 "编辑" 功能重制配置文件')
-                    import traceback
-
-                    logger.debug(traceback.format_exc())
-                    return
-
+                # 获取项目信息
+                project_json = self.client.api.project(project_id=config["project_id"])
             except Exception as e:
                 logger.error("读取配置文件失败, 请检查配置文件格式")
                 import traceback
-
                 logger.debug(traceback.format_exc())
                 return
-
             try:
+                # 获取账号信息
+                aid = str(config["account_id"]) if "account_id" in config else None
+                account = account_manager.get_account(aid) if aid else None
                 # 创建订单对象
                 order = Order(cookie=account.cookie, project_id=config["project_id"], device=account.device)
-                
                 # 如果不是 wait_anyway 模式，则等待开票时间
                 if not wait_anyway and "sale_start" in project_json["data"]:
                     sale_start_time = project_json["data"]["sale_start"]
                     self.wait_for_sale_start(sale_start_time)
-                
                 # 设置为不等待，因为我们已经在这里处理了等待逻辑
                 config["wait_invoice"] = False
-
                 # 执行抢票逻辑
                 Logic(order=order, config=config).run()
             except CancelledError:
@@ -300,6 +306,5 @@ class ConfigExecutor:
                 return
             except Exception as e:
                 import traceback
-
                 logger.debug(traceback.format_exc())
-                raise e 
+                raise e

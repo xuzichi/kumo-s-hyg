@@ -73,7 +73,7 @@ jobs:
 
     - name: Build Windows EXE
       run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import loguru --hidden-import bili_ticket_gt_python --hidden-import segno --add-data "app;app" run.py
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import curl_cffi --hidden-import yaml --hidden-import requests --hidden-import loguru --hidden-import bili_ticket_gt_python --hidden-import segno --add-data "app;app" run.py
       shell: pwsh
 
     - name: Upload Windows Artifact
@@ -141,7 +141,7 @@ jobs:
 
     - name: Build macOS App
       run: |
-        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import yaml --hidden-import requests --hidden-import loguru --hidden-import bili_ticket_gt_python --hidden-import segno --add-data="app:app" run.py
+        pyinstaller --onefile --name "${{ env.OUTPUT_NAME }}" --hidden-import noneprompt --hidden-import curl_cffi --hidden-import yaml --hidden-import requests --hidden-import loguru --hidden-import bili_ticket_gt_python --hidden-import segno --add-data="app:app" run.py
         chmod +x dist/"${{ env.OUTPUT_NAME }}"
 
     - name: Upload macOS Artifact

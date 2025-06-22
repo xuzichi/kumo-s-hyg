@@ -246,7 +246,7 @@ class Client:
         # 获取 buvid3 / buvid4
         buvid3 = buvid4 = ""
         try:
-            r = requests.get("https://api.bilibili.com/x/frontend/finger/spi", headers={"User-Agent": self.headers["User-Agent"]}, timeout=10)
+            r = curl_cffi.requests.get("https://api.bilibili.com/x/frontend/finger/spi", headers={"User-Agent": self.headers["User-Agent"]}, timeout=10)
             if r.status_code == 200:
                 jd = r.json().get("data", {})
                 buvid3 = jd.get("b_3", "")
