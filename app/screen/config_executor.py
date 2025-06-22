@@ -84,7 +84,8 @@ class ConfigExecutor:
                 if target_path.exists():
                     logger.error("目标文件已存在！")
                     continue
-                target_path.write_text(config_path.read_text(), encoding="utf-8")
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(config_path.read_text(encoding="utf-8"))
                 logger.success(f"已复制为 {target_path.name}")
                 return
             if choice.data == "delete":
