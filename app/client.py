@@ -6,7 +6,7 @@ import ssl
 import threading
 import traceback
 from urllib.parse import urlencode
-import requests
+import curl_cffi.requests
 from typing import Optional, List, Dict, TYPE_CHECKING
 from dataclasses import dataclass
 import random
@@ -86,17 +86,12 @@ class Client:
             # 如果传入空字符串，清理 Cookie 头
             self.headers.pop("Cookie", None)
     
-    def _make_api_call(self, method: str, url: str, headers: dict, json_data=None, params=None, timeout: int = 120) -> Optional[dict]:
-        """增强的API调用方法，支持错误处理和风控检测"""
+    def _make_api_call(self, method: str, url: str, headers: dict, json_data=None, params=None, timeout: int = 120, impersonate: str = None) -> Optional[dict]:
+        """统一API调用方法，支持impersonate参数，官方推荐写法"""
         try:
-            # 动态更新请求头
             enhanced_headers = headers.copy()
-            
-            # 自动附带 x-risk-header（若已生成）
             if hasattr(self, "x_risk_header") and self.x_risk_header:
                 enhanced_headers.setdefault("x-risk-header", self.x_risk_header)
-            
-            # 添加设备信息头（如果设备指纹可用）
             if hasattr(self, 'device_fingerprint'):
                 device_info = {
                     "platform": "ios",
@@ -109,29 +104,29 @@ class Client:
                     "screen_resolution": self.device_fingerprint.resolution
                 }
                 enhanced_headers["X-Bili-Device-Req-Json"] = json.dumps(device_info)
-            
             enhanced_headers["X-Bili-Trace-Id"] = f"{int(time.time() * 1000)}:{int(time.time() * 1000)}:0:0"
-            
-            if method.upper() == 'GET':
-                response = requests.get(url, headers=enhanced_headers, params=params, timeout=timeout)
-            elif method.upper() == 'POST':
-                response = requests.post(
-                    url,
-                    headers=enhanced_headers,
-                    json=json_data,
-                    timeout=timeout
-                )
+            request_args = {
+                "method": method.upper(),
+                "url": url,
+                "headers": enhanced_headers,
+                "timeout": timeout
+            }
+            if params:
+                request_args["params"] = params
+            if json_data:
+                request_args["json"] = json_data
+            if impersonate:
+                request_args["impersonate"] = impersonate
+            response = curl_cffi.requests.request(**request_args)
+            if method.upper() == 'POST':
                 try:
                     logger.debug(f"POST {url}")
                     logger.debug(f"Response: {response.status_code}")
                     logger.debug(f"Response: {response.text}")
                 except Exception as e:
                     logger.error(f"Error logging response: {e}")
-            
             response.raise_for_status()
             result = response.json()
-            
-            # 统一检测并处理 Gaia 风控
             code = result.get("code")
             if code in (-401, -352):
                 risk_params = None
@@ -141,18 +136,15 @@ class Client:
                     risk_params = result.get("data", {}).get("v_voucher")
                 if not risk_params:
                     risk_params = response.headers.get("x-bili-gaia-vvoucher")
-
                 if risk_params:
                     logger.warning("检测到风控验证，尝试自动处理...")
                     if self.handle_gaia(risk_params):
                         logger.success("风控验证通过，重新请求...")
-                        return self._make_api_call(method, url, headers, json_data, params, timeout)
+                        return self._make_api_call(method, url, headers, json_data, params, timeout, impersonate)
                     else:
                         logger.error("风控验证失败")
-            
             return result
-            
-        except requests.exceptions.RequestException as e:
+        except curl_cffi.requests.exceptions.RequestException as e:
             logger.error(f"API request failed for {url}: {e}")
             raise
     
