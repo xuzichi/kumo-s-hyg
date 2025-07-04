@@ -7,7 +7,7 @@ from .utils.file_utils import file_utils
 from app.screen import Main
 from .client import Client
 
-__versions__ = "0.5.18"
+__versions__ = "0.5.19"
 
 
 if __name__ == "__main__" or __name__ == "app.__main__":

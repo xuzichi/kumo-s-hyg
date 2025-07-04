@@ -183,7 +183,7 @@ jobs:
           echo "::error::Failed to extract version from python run.py -v"
           exit 1 # 确保在提取失败时作业失败
         fi
-        OUTPUT_FILE_NAME="${{ env.APP_NAME }}-macos-v$EXTRACTED_VERSION"
+        OUTPUT_FILE_NAME="${{ env.APP_NAME }}-linux-v$EXTRACTED_VERSION"
         
         # 设置环境变量供当前作业后续步骤使用
         echo "VERSION=$EXTRACTED_VERSION" >> $GITHUB_ENV
