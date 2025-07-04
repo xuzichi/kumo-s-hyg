@@ -5,3 +5,4 @@ PyYAML
 segno
 loguru
 bili_ticket_gt_python
+qrcode
