@@ -4,7 +4,6 @@ models/*
 .device_configs/*
 
 .DS_Store
-.github/
 _app_old/
 app/.DS_Store
 config/
@@ -15,7 +14,6 @@ i.js
 bb1/
 bb2/
 bilibili-API-collect-master/
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

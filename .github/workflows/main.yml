@@ -214,7 +214,7 @@ jobs:
     - name: Upload Linux Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: macos-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
+        name: linux-executable-${{ steps.get_version.outputs.version_str }} # 使用步骤输出的版本号
         path: dist/${{ steps.get_version.outputs.output_name_str }} # 使用步骤输出的文件名
 
   create-release:
@@ -259,6 +259,13 @@ jobs:
         name: macos-executable-${{ needs.build-macos.outputs.version }}
         path: artifacts # 将所有构建产物下载到通用目录
 
+    - name: Download Linux Artifact
+      uses: actions/download-artifact@v4
+      with:
+        # 使用 build-macos 作业输出的版本号来匹配正确的构建产物名称
+        name: linux-executable-${{ needs.build-macos.outputs.version }}
+        path: artifacts # 将所有构建产物下载到通用目录
+
     - name: Verify Downloaded Artifacts
       run: |
         echo "Checking for Windows artifact: artifacts/${{ steps.release_vars.outputs.final_windows_filename }}"
@@ -279,10 +286,12 @@ jobs:
           **Downloads:**
           * Windows: `${{ steps.release_vars.outputs.final_windows_filename }}`
           * macOS: `${{ steps.release_vars.outputs.final_macos_filename }}`
+          * Linux: `${{ steps.release_vars.outputs.final_linux_filename }}`
         draft: false
         prerelease: false
         files: |
           artifacts/${{ steps.release_vars.outputs.final_windows_filename }}
           artifacts/${{ steps.release_vars.outputs.final_macos_filename }}
+          artifacts/${{ steps.release_vars.outputs.final_linux_filename }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
