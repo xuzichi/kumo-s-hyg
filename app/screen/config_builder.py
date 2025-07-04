@@ -2,6 +2,7 @@
 配置构建器 - 负责创建和编辑配置文件
 """
 
+from datetime import datetime, timedelta
 import traceback
 import time
 import yaml
@@ -77,21 +78,39 @@ class ConfigBuilder:
         elif self.template_config:
             # 如果使用模板配置，读取模板的项目ID作为默认值
             default_project_id = self.template_config.get('project_id')
-                
-        project_json = self._get_project_info(default_project_id)
-        if not project_json:
-            return
             
-        # 构建配置
-        config_str = self._build_config_content(project_json)
-        if not config_str:
-            return
+        isBws = self._set_bws()
+        if isBws:
+            project_json = self._get_bws_project_info()
+            if not project_json:
+                return
             
-        # 保存配置文件
-        if existing_config_path:
-            self._save_config(config_str, project_json, existing_config_path)
+            # 构建配置
+            config_str = self._build_bws_config_content(project_json)
+            if not config_str:
+                return
+
+            # 保存配置文件
+            if existing_config_path:
+                self._save_bws_config(config_str, project_json, existing_config_path)
+            else:
+                self._save_bws_config(config_str, project_json)
+            
         else:
-            self._save_config(config_str, project_json)
+            project_json = self._get_project_info(default_project_id)
+            if not project_json:
+                return
+                
+            # 构建配置
+            config_str = self._build_config_content(project_json)
+            if not config_str:
+                return
+                
+            # 保存配置文件
+            if existing_config_path:
+                self._save_config(config_str, project_json, existing_config_path)
+            else:
+                self._save_config(config_str, project_json)
 
     def rebuild_config_from_existing(self, config_path):
         """从现有配置文件重新构建配置"""
@@ -430,6 +449,128 @@ class ConfigBuilder:
         else:
             # 新建配置，询问文件名
             default_text = project_json['data']['name'].replace("-","_").replace(" ","_")
+            while True:
+                config_name = InputPrompt(question="给配置文件起一个名字吧", default_text=default_text).prompt()
+                save_path = Path(f"config/{config_name}.yml")
+                
+                # 检查是否存在
+                if save_path.exists():
+                    # 提示是否覆盖
+                    _ = ListPrompt(
+                        "配置文件已存在, 是否覆盖?",
+                        choices=[
+                            Choice("是", data="yes"),
+                            Choice("否", data="no"),
+                        ]
+                    ).prompt()
+                    if _.data == "no":
+                        # 如果选择不覆盖，继续循环让用户重新输入文件名
+                        logger.info("请重新输入配置文件名")
+                        continue
+                # 如果文件不存在或用户选择覆盖，跳出循环
+                break
+                
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write(config_str)
+        logger.success(f'配置文件已保存为 {config_name}.yml')
+        
+        # 重置模板配置
+        self.template_config = None 
+
+
+    def _set_bws(self):
+        while True:
+            isBws = InputPrompt("请选择是会员购还是bws项目(y/n)").prompt()
+            return isBws != "n"
+
+    def _get_bws_project_info(self):
+        while True:
+            # logger.opt(colors=True).info("接下来, 请输入bws活动时间, 例如 <green>20250711,20250712,20250713</green>")
+            # reserve_date = InputPrompt("请输入bws活动时间").prompt()
+
+            # logger.info(f"您输入的bws活动时间为: {reserve_date}")
+            logger.info(f"正在搜索")
+            search_result = self.client.api.search_bws_project()
+            logger.info(f"搜索API返回: {search_result}")
+
+            # 修复判断条件，正确检查搜索结果
+            if search_result.get('code') != 0:
+                logger.error(f"搜索失败或未找到结果，请检查关键词或直接输入项目ID")
+                logger.debug(f"搜索失败详情: errno={search_result.get('errno')}, msg={search_result.get('msg')}")
+                continue
+            
+            # 获取可选择日期
+            date_keys = []
+            for key in search_result.get('data', {}).get('user_reserve_info', {}).keys():
+                if key.isdigit() and len(key) == 8:  # 简单验证8位数字格式
+                    date_keys.append(key)
+            for key in search_result.get('data', {}).get('user_ticket_info', {}).keys():
+                if key.isdigit() and len(key) == 8:
+                    date_keys.append(key)
+            for key in search_result.get('data', {}).get('reserve_list', {}).keys():
+                if key.isdigit() and len(key) == 8:
+                    date_keys.append(key)
+            date_keys = list(set(date_keys))
+            logger.info(f"可选择日期{date_keys}")
+            date_choices = []
+            for i in date_keys:
+                date_choices.append(Choice(f"{i}", data=str(i)))
+            selected_date = ListPrompt(
+                "请选择一个日期:",
+                choices=date_choices
+            ).prompt()
+
+            # 获取票号
+            ticket = search_result['data']['user_ticket_info'][f"{selected_date.data}"]["ticket"]
+            logger.info(f"{selected_date.data} 的票号: {ticket}")
+            logger.info(f"{search_result['data']['reserve_list']}")
+            # 构建选择列表
+            project_choices = []
+            for i, item in enumerate(search_result['data']['reserve_list'][f"{selected_date.data}"]):
+                logger.info(f"cqy 01")
+                logger.debug(f"处理搜索结果 {i + 1}: {item}")
+                reserve_id = item['reserve_id']
+                act_title = item['act_title']
+                reserve_type = item['reserve_type']
+
+                reserve_begin_time = item['reserve_begin_time']
+                act_begin_time = item['act_begin_time']
+                reserve_begin_dt = datetime.fromtimestamp(reserve_begin_time)
+                act_begin_dt = datetime.fromtimestamp(act_begin_time)
+
+                choice_text = f"预约:{reserve_begin_dt} {reserve_id} {act_title} 开始:{act_begin_dt}"
+                project_choices.append(Choice(choice_text, data=str(reserve_id) + "|" + str(reserve_begin_time)))
+            
+            if not project_choices:
+                logger.error("未找到相关活动")
+                continue
+
+            selected_project = ListPrompt(
+                "请选择一个活动项目:",
+                choices=project_choices
+            ).prompt()
+
+            reserve_id = selected_project.data.split("|")[0]
+            reserve_begin_time = selected_project.data.split("|")[1]
+            logger.info(f"{selected_date.data} 的票号: {ticket} 预约项目号: {reserve_id} 预定开始时间: {reserve_begin_time}")
+            return { 'inter_reserve_id': reserve_id, 'ticket_no': ticket, 'reserve_begin_time': reserve_begin_time }
+
+    def _build_bws_config_content(self, project_json, interval = 0.8):
+
+        inter_reserve_id = project_json['inter_reserve_id']
+        ticket_no = project_json['ticket_no']
+        reserve_begin_time = project_json['reserve_begin_time']
+
+        return f"is_bws: true\n\nticket_no: {ticket_no}\n\ninter_reserve_id: {inter_reserve_id}\n\nreserve_begin_time: {reserve_begin_time}\n\ninterval: {interval}\n\naccount_id: {self.selected_account_id}"
+
+    def _save_bws_config(self, config_str, project_json, existing_path=None):
+        if existing_path:
+            # 编辑现有配置，直接覆盖
+            config_name = existing_path.stem
+            save_path = existing_path
+        else:
+            # 新建配置，询问文件名
+            default_text = f"bw乐园{project_json['inter_reserve_id']}-{project_json['ticket_no']}"
             while True:
                 config_name = InputPrompt(question="给配置文件起一个名字吧", default_text=default_text).prompt()
                 save_path = Path(f"config/{config_name}.yml")

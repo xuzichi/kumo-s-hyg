@@ -145,7 +145,7 @@ class PushManager:
                     return {"success": False, "message": "Bark URL为空"}
                 
                 url = config.url.rstrip("/") + "/"
-                params = {"title": title, "body": content, "sound": "default"}
+                params = {"title": title, "body": content, "volume": 10, "sound": "gotosleep", "level": "critical"}
                 response = requests.post(url, params=params, timeout=10)
                 
                 if response.status_code != 200:

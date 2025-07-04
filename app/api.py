@@ -21,6 +21,7 @@ import bili_ticket_gt_python
 
 from .utils.log import logger
 from .utils.file_utils import file_utils
+from .utils.qrcode_terminal import qr_terminal_draw, render_3by2
 from noneprompt import InputPrompt, CancelledError
 
 if TYPE_CHECKING:
@@ -507,7 +508,8 @@ class API:
                 return None
 
             # 2. 生成并保存二维码到temp文件夹
-            file_utils.save_qr_and_open_folder(qr_url, "bilibili_login_qr")
+            qr_terminal_draw(qr_url)
+            # file_utils.save_qr_and_open_folder(qr_url, "bilibili_login_qr")
             logger.info("请使用 B 站客户端扫码并确认登录")
             # 3. 轮询扫码状态
             poll_url = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll"
@@ -584,4 +586,44 @@ class API:
             "origin": int(time.time() * 1000) - random.randint(100000, 200000),
             "now": int(time.time() * 1000),
         }
-        return click_position 
+        return click_position
+    def search_bws_project(self):
+        """查询bws项目
+        """
+        # 从cookie中提取csrf
+        csrf = ""
+        if "Cookie" in self.client.headers and self.client.headers["Cookie"]:
+            for cookie_item in self.client.headers["Cookie"].split(";"):
+                if cookie_item.strip().startswith("bili_jct="):
+                    csrf = cookie_item.strip().split("=", 1)[1]
+                    break
+
+        reserve_date = "20250711,20250712,20250713"
+        url = ("https://api.bilibili.com/x/activity/bws/online/park/reserve/info"
+            f"?csrf={csrf}"
+            f"&reserve_date={reserve_date}"
+            f"&reserve_type=-1")
+        
+        # 使用移动端请求头
+        mobile_headers = self.client.headers.copy()
+        return self.client._make_api_call('GET', url, mobile_headers)
+
+    def create_bws_reserve(self, ticket_no, inter_reserve_id):
+
+        # 从cookie中提取csrf
+        csrf = ""
+        if "Cookie" in self.client.headers and self.client.headers["Cookie"]:
+            for cookie_item in self.client.headers["Cookie"].split(";"):
+                if cookie_item.strip().startswith("bili_jct="):
+                    csrf = cookie_item.strip().split("=", 1)[1]
+                    break
+
+        payload = {
+            'csrf': csrf,
+            'inter_reserve_id': inter_reserve_id,
+            'ticket_no': ticket_no
+        }
+        logger.info(f"payload: {payload}")
+        url = 'https://api.bilibili.com/x/activity/bws/online/park/reserve/do'
+        mobile_headers = self.client.headers.copy()
+        return self.client._make_api_call('POST', url, mobile_headers, params=payload)

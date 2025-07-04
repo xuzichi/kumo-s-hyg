@@ -24,6 +24,7 @@ from app.utils import account_manager
 from .config_executor import ConfigExecutor
 from .test_screen import TestScreen
 from .push_screen import PushScreen
+from .bws_screen import BwsScreen
 
 
 class Main:
@@ -56,6 +57,7 @@ class Main:
             choices.append(Choice("+ 新建配置", data="new"))
             choices.append(Choice("P 推送管理", data="push"))
             choices.append(Choice("# 功能测试", data="test"))
+            choices.append(Choice("# bws预约", data="bws"))
             choices.append(Choice("← 退出", data="exit"))
             
             _ = ListPrompt(
@@ -70,6 +72,8 @@ class Main:
                     PushScreen().run()
                 elif _.data == "test":
                     TestScreen().run()
+                elif _.data == "bws":
+                    BwsScreen().run()
                 elif _.data == "exit":
                     break
                 elif isinstance(_.data, Path):
