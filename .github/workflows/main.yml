@@ -236,13 +236,16 @@ jobs:
         # 从构建作业输出中获取确切的文件名
         WINDOWS_FILENAME="${{ needs.build-windows.outputs.output_name }}.exe"
         MACOS_FILENAME="${{ needs.build-macos.outputs.output_name }}"
-        
+        LINUX_FILENAME="${{ needs.build-linux.outputs.output_name }}"
+
         echo "WINDOWS_FILENAME_ENV=$WINDOWS_FILENAME" >> $GITHUB_ENV
         echo "MACOS_FILENAME_ENV=$MACOS_FILENAME" >> $GITHUB_ENV
+        echo "LINUX_FILENAME_ENV=$LINUX_FILENAME" >> $GITHUB_ENV
         
         # 也设置为步骤输出，方便后续直接引用
         echo "final_windows_filename=$WINDOWS_FILENAME" >> $GITHUB_OUTPUT
         echo "final_macos_filename=$MACOS_FILENAME" >> $GITHUB_OUTPUT
+        echo "final_linux_filename=$LINUX_FILENAME" >> $GITHUB_OUTPUT
 
 
     - name: Download Windows Artifact
