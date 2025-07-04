@@ -265,8 +265,8 @@ jobs:
     - name: Download Linux Artifact
       uses: actions/download-artifact@v4
       with:
-        # 使用 build-macos 作业输出的版本号来匹配正确的构建产物名称
-        name: linux-executable-${{ needs.build-macos.outputs.version }}
+        # 使用 build-linux 作业输出的版本号来匹配正确的构建产物名称
+        name: linux-executable-${{ needs.build-linux.outputs.version }}
         path: artifacts # 将所有构建产物下载到通用目录
 
     - name: Verify Downloaded Artifacts
