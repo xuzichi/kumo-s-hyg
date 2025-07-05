@@ -292,7 +292,7 @@ class ConfigExecutor:
             remaining_seconds = sale_start_time - current_time
             
             # 提前0.3秒开始抢票
-            if remaining_seconds <= 0.3:
+            if remaining_seconds <= 0:
                 logger.opt(colors=True).info("<green>开始抢票！</green>")
                 break
             
