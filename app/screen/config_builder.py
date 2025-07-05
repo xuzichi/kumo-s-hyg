@@ -555,7 +555,7 @@ class ConfigBuilder:
             logger.info(f"{selected_date.data} 的票号: {ticket} 预约项目号: {reserve_id} 预定开始时间: {reserve_begin_time}")
             return { 'inter_reserve_id': reserve_id, 'ticket_no': ticket, 'reserve_begin_time': reserve_begin_time }
 
-    def _build_bws_config_content(self, project_json, interval = 0.8):
+    def _build_bws_config_content(self, project_json, interval = 0):
 
         inter_reserve_id = project_json['inter_reserve_id']
         ticket_no = project_json['ticket_no']

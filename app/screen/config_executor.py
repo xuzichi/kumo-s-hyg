@@ -398,7 +398,7 @@ class ConfigExecutor:
                     # 执行create下单
                     result = self.client.api.create_bws_reserve(ticket_no=ticket_no, inter_reserve_id=inter_reserve_id)
                     logger.debug(f"抢票 code: {result['code']} message: {result['message']}")
-                    if (order_attempt == 0):
+                    if (result['code'] == 0):
                         logger.info(f"预定成功！！！")
                         push_manager.push("[khyg] 预定成功", f"请查看结果!")
                         break
