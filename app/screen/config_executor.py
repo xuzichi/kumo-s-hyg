@@ -364,7 +364,6 @@ class ConfigExecutor:
             except Exception as e:
                 import traceback
                 logger.debug(traceback.format_exc())
-                raise e
 
     def run_bws_by_config(self, config_name, wait_anyway: bool = False):
         """运行指定的配置文件"""
@@ -415,5 +414,4 @@ class ConfigExecutor:
             except Exception as e:
                 import traceback
                 logger.debug(traceback.format_exc())
-                raise e
         return
