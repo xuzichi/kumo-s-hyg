@@ -146,6 +146,7 @@ class Client:
             return result
         except curl_cffi.requests.exceptions.RequestException as e:
             logger.error(f"API request failed for {url}: {e}")
+            return { code: 429 }
     
     def _build_ctoken(
         self,
